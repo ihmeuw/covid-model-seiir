@@ -9,10 +9,10 @@ setup(
     package_dir={'': 'src'},
     install_requires=[
         'argparse',
-        'mrtool',
         'numpy',
         'odeopt',
-        'pandas'
+        'pandas',
+        'slime',
     ],
     zip_safe=False,
 )
