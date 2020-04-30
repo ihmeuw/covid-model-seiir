@@ -4,44 +4,99 @@
     ~~~~~~~~~~~~
 """
 import numpy as np
-from odeopt.ode import ODESys
+import pandas as pd
+from datetime import datetime
+from datetime import timedelta
 from odeopt.ode import RK4
 from odeopt.ode import LinearFirstOrder
 from odeopt.core.utils import linear_interpolate
 from .spline_fit import SplineFit
 
+X = 14
+Y = 18
+
 
 class SingleGroupODEProcess:
-    def __init__(self, t, obs,
-                 alpha, sigma, gamma1, gamma2, N,
+    def __init__(self, df,
+                 col_date,
+                 col_cases,
+                 col_pop,
+                 col_loc_id,
+                 peak_date,
+                 day_shift=4,
+                 alpha=(0.95,)*2,
+                 sigma=(0.2,)*2,
+                 gamma1=(0.5,)*2,
+                 gamma2=(0.5,)*2,
                  solver_class=RK4,
                  solver_dt=1e-1,
                  spline_options=None):
         """Constructor of the SingleGroupODEProcess
 
         Args:
-            t (np.ndarray): Time variable.
-            obs (np.ndarray): Cases variable.
-            alpha (float): ODE parameter.
-            sigma (float): ODE parameter.
-            gamma1 (float): ODE parameter.
-            gamma2 (float): ODE parameter.
-            N (float): ODE parameter.
+            df (pd.DateFrame): DataFrame contains all the data.
+            col_date (str): Date of the rows.
+            col_cases (str): Column with new infectious data.
+            col_pop (str): Column with population.
+            col_loc_id (str): Column with location id.
+            peak_date (str | datetime): Column with the peaked date.
+            day_shift (int, optional): Days shift for the data sub-selection.
+            alpha (arraylike): bounds for uniformly sampling alpha.
+            sigma (arraylike): bounds for uniformly sampling sigma.
+            gamma1 (arraylike): bounds for uniformly sampling gamma1.
+            gamma2 (arraylike): bounds for uniformly sampling gamma2.
             solver_class (ODESolver, optional): Solver for the ODE system.
             solver_dt (float, optional): Step size for the ODE system.
             spline_options (dict | None, optional):
                 Dictionary of spline prior options.
         """
         # observations
-        self.t = t
-        self.obs = obs
+        assert col_date in df
+        assert col_cases in df
+        assert col_pop in df
+        assert col_loc_id in df
+        self.col_date = col_date
+        self.col_cases = col_cases
+        self.col_pop = col_pop
+        self.col_loc_id = col_loc_id
+
+        # subset the data
+        self.peak_date = peak_date
+        self.day_shift = day_shift
+        df.sort_values(self.col_date, inplace=True)
+        df[col_date] = pd.to_datetime(df[col_date])
+        x = X
+        y = Y + self.day_shift
+        idx = df[col_date] < max(datetime.today() + timedelta(x - y),
+                                 peak_date + np.timedelta64((x - 4) - y))
+        idx = idx & df[col_cases] > 0.0
+        self.df = df[idx].iloc[1:].copy()
+
+        # compute days
+        self.col_days = 'days'
+        self.df[self.col_days] = (self.df[self.col_date] -
+                                  self.df[self.col_date].min()).dt.days.values
+
+        # parse input
+        self.date = self.df[self.col_date]
+        self.t = self.df[self.col_days].values
+        self.obs = self.df[self.col_cases].values
+        self.loc_id = self.df[self.col_loc_id].values[0]
 
         # ODE parameters
-        self.alpha = alpha
-        self.sigma = sigma
-        self.gamma1 = gamma1
-        self.gamma2 = gamma2
-        self.N = N
+        assert len(alpha) == 2 and \
+               0.0 <= alpha[0] <= alpha[1]
+        assert len(sigma) == 2 and \
+               0.0 <= sigma[0] <= sigma[1]
+        assert len(gamma1) == 2 and \
+               0.0 <= gamma1[0] <= gamma1[1]
+        assert len(gamma2) == 2 and \
+               0.0 <= gamma2[0] <= gamma2[1]
+        self.alpha = np.random.uniform(*alpha)
+        self.sigma = np.random.uniform(*sigma)
+        self.gamma1 = np.random.uniform(*gamma1)
+        self.gamma2 = np.random.uniform(*gamma2)
+        self.N = self.df[self.col_pop].values[0]
         self.init_cond = {
             'S': self.N,
             'E': self.obs[0],
@@ -75,8 +130,8 @@ class SingleGroupODEProcess:
         """Create spline fit object.
         """
         self.step_spline_model = SplineFit(
-            self.t,
-            np.log(np.maximum(1.0, self.obs)),
+            self.t[self.obs > 0.0],
+            np.log(self.obs[self.obs > 0.0]),
             self.spline_options
         )
 
@@ -203,4 +258,33 @@ class SingleGroupODEProcess:
             c: linear_interpolate(t, self.t_params, self.components[c])
             for c in self.components
         }
+        components.update({
+            'newE': linear_interpolate(t, self.t_params, self.rhs_newE)
+        })
         return params, components
+
+    def create_result_df(self):
+        """Create result DataFrame.
+        """
+        params, components = self.predict(self.t)
+        df_result = pd.DataFrame({
+            'loc_id': self.loc_id,
+            'date': self.date,
+            'days': self.t,
+            'beta': params[0]
+        })
+
+        for k, v in components.items():
+            df_result[k] = v
+
+        return df_result
+
+    def create_params_df(self):
+        """Create parameter DataFrame.
+        """
+        df_params = pd.DataFrame([self.alpha, self.sigma,
+                                  self.gamma1, self.gamma2],
+                                 index=['alpha', 'sigma', 'gamma1', 'gamma2'],
+                                 columns=['params'])
+
+        return df_params
