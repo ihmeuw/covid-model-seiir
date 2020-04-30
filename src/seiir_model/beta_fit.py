@@ -14,15 +14,14 @@ class BetaRegressor:
 
     def set_fe(self):
         covmodel_set_fe = copy.deepcopy(self.covmodel_set)
-        for covmodel in covmodel_set_fe:
+        for covmodel in covmodel_set_fe.cov_models:
             covmodel.use_re = False 
 
         mr_model_fe = MRModel(self.mr_data, covmodel_set_fe)
         mr_model_fe.fit_model()
-        fe = list(mr_model_fe.result)[0]
-
-        for i, covmodel in enumerate(self.covmodel_set):
-            covmodel.bounds = np.array([fe[i], fe[i]])
+        fe = list(mr_model_fe.result.values())[0]
+        for v, covmodel in zip(fe, self.covmodel_set.cov_models):
+            covmodel.bounds = np.array([v, v])
 
     def fit(self, two_stage=False):
         if two_stage:
@@ -32,8 +31,12 @@ class BetaRegressor:
         self.mr_model.fit_model()
         self.cov_coef = self.mr_model.result
 
-    def predict(self, cov):
-        return self.covmodel_set.predict(cov)
+    def predict(self, cov, group):
+        if group in self.cov_coef:
+            assert cov.shape[1] == len(self.cov_coef[group])
+            return np.sum([self.cov_coef[group][i] * cov[:, i] for i in range(cov.shape[1])], axis=0)
+        else:
+            raise RuntimeError('Group Not Found.')
 
 
         
