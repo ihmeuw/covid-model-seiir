@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime
 from datetime import timedelta
 from odeopt.ode import RK4
-from odeopt.ode import LinearFirstOrder
+from odeopt.ode import ForwardEuler as LinearFirstOrder
 from odeopt.core.utils import linear_interpolate
 from .spline_fit import SplineFit
 
