@@ -3,17 +3,17 @@
     ODE Process
     ~~~~~~~~~~~~
 """
+from dataclasses import dataclass
+from typing import Dict, Tuple
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from datetime import timedelta
 from odeopt.ode import RK4
-from odeopt.ode import ForwardEuler as LinearFirstOrder
+from odeopt.ode import LinearFirstOrder
 from odeopt.core.utils import linear_interpolate
 from .spline_fit import SplineFit
 
-X = 14
-Y = 18
+
 
 
 class SingleGroupODEProcess:
@@ -22,8 +22,8 @@ class SingleGroupODEProcess:
                  col_cases,
                  col_pop,
                  col_loc_id,
-                 peak_date,
-                 day_shift=4,
+                 day_shift=8,
+                 lag_days=17,
                  alpha=(0.95,)*2,
                  sigma=(0.2,)*2,
                  gamma1=(0.5,)*2,
@@ -39,7 +39,7 @@ class SingleGroupODEProcess:
             col_cases (str): Column with new infectious data.
             col_pop (str): Column with population.
             col_loc_id (str): Column with location id.
-            peak_date (str | datetime): Column with the peaked date.
+            peak_date (str | None): Column with the peaked date.
             day_shift (int, optional): Days shift for the data sub-selection.
             alpha (arraylike): bounds for uniformly sampling alpha.
             sigma (arraylike): bounds for uniformly sampling sigma.
@@ -61,21 +61,20 @@ class SingleGroupODEProcess:
         self.col_loc_id = col_loc_id
 
         # subset the data
-        self.peak_date = peak_date
         self.day_shift = day_shift
+        self.lag_days = lag_days
         df.sort_values(self.col_date, inplace=True)
-        df[col_date] = pd.to_datetime(df[col_date])
-        x = X
-        y = Y + self.day_shift
-        idx = df[col_date] < max(datetime.today() + timedelta(x - y),
-                                 peak_date + np.timedelta64((x - 4) - y))
+        date = pd.to_datetime(df[col_date])
+        self.today = np.datetime64(datetime.today())
+        idx = date < self.today + np.timedelta64(self.day_shift -
+                                                 self.lag_days, 'D')
         idx = idx & df[col_cases] > 0.0
         self.df = df[idx].iloc[1:].copy()
+        date = date[idx][1:]
 
         # compute days
         self.col_days = 'days'
-        self.df[self.col_days] = (self.df[self.col_date] -
-                                  self.df[self.col_date].min()).dt.days.values
+        self.df[self.col_days] = (date - date.min()).dt.days.values
 
         # parse input
         self.date = self.df[self.col_date]
@@ -226,11 +225,15 @@ class SingleGroupODEProcess:
                                         self.gamma1*I1[None, :])[0]
 
         # fit S
+        self.init_cond.update({
+            'S': self.N - self.init_cond['E'] - self.init_cond['I1']
+        })
         self.step_ode_sys.update_given_params(c=0.0)
         S = self.step_ode_sys.simulate(self.t_params,
                                        np.array([self.init_cond['S']]),
                                        self.t_params,
                                        -self.rhs_newE[None, :])[0]
+        neg_S_idx = S < 0.0
 
         # fit R
         self.step_ode_sys.update_given_params(c=0.0)
@@ -238,6 +241,14 @@ class SingleGroupODEProcess:
                                        np.array([self.init_cond['R']]),
                                        self.t_params,
                                        self.gamma2*I2[None, :])[0]
+
+        if np.any(neg_S_idx):
+            id_min = np.min(np.arange(S.size)[neg_S_idx])
+            S[id_min:] = S[id_min - 1]
+            E[id_min:] = E[id_min - 1]
+            I1[id_min:] = I1[id_min - 1]
+            I2[id_min:] = I2[id_min - 1]
+            R[id_min:] = R[id_min - 1]
 
         self.components = {
             'S': S,
@@ -260,6 +271,9 @@ class SingleGroupODEProcess:
         }
         components.update({
             'newE': linear_interpolate(t, self.t_params, self.rhs_newE)
+        })
+        components.update({
+            'newE_obs': linear_interpolate(t, self.t, self.obs)
         })
         return params, components
 
@@ -286,5 +300,105 @@ class SingleGroupODEProcess:
                                   self.gamma1, self.gamma2],
                                  index=['alpha', 'sigma', 'gamma1', 'gamma2'],
                                  columns=['params'])
+
+        return df_params
+
+@dataclass
+class ODEProcessInput:
+    df_dict: Dict
+    col_date: str
+    col_cases: str
+    col_pop: str
+    col_loc_id: str
+    col_lag_days: str
+
+    alpha: Tuple
+    sigma: Tuple
+    gamma1: Tuple
+    gamma2: Tuple
+    solver_dt: float
+    spline_options: Dict
+    day_shift: int
+
+
+class ODEProcess:
+    """ODE Process for multiple group.
+    """
+    def __init__(self, input):
+        """Constructor of ODEProcess.
+
+        Args:
+            input: ODEProcessInput
+        """
+        self.df_dict = input.df_dict
+        self.col_date = input.col_date
+        self.col_cases = input.col_cases
+        self.col_pop = input.col_pop
+        self.col_loc_id = input.col_loc_id
+        self.col_lag_days = input.col_lag_days
+
+        self.alpha = input.alpha
+        self.sigma = input.sigma
+        self.gamma1 = input.gamma1
+        self.gamma2 = input.gamma2
+        self.solver_dt = input.solver_dt
+        self.spline_options = input.spline_options
+        self.day_shift = input.day_shift
+
+        # create the location id
+        self.loc_ids = np.sort(list(self.df_dict.keys()))
+
+        # sampling the parameters here
+        self.alpha = np.random.uniform(*self.alpha)
+        self.sigma = np.random.uniform(*self.sigma)
+        self.gamma1 = np.random.uniform(*self.gamma1)
+        self.gamma2 = np.random.uniform(*self.gamma2)
+
+        # lag days
+        self.lag_days = self.df_dict[self.loc_ids[0]][
+            self.col_lag_days].values[0]
+
+        # create model for each location
+        self.models = {
+            loc_id: SingleGroupODEProcess(
+                self.df_dict[loc_id],
+                self.col_date,
+                self.col_cases,
+                self.col_pop,
+                self.col_loc_id,
+                day_shift=self.day_shift,
+                lag_days=self.lag_days,
+                alpha=(self.alpha,)*2,
+                sigma=(self.sigma,)*2,
+                gamma1=(self.gamma1,)*2,
+                gamma2=(self.gamma2,)*2,
+                solver_class=RK4,
+                solver_dt=self.solver_dt,
+                spline_options=self.spline_options
+            )
+            for loc_id in self.loc_ids
+        }
+
+    def process(self):
+        """Process all models.
+        """
+        for loc_id, model in self.models.items():
+            model.process()
+
+    def create_result_df(self):
+        """Create result DataFrame.
+        """
+        return pd.concat([
+            model.create_result_df()
+            for loc_id, model in self.models.items()
+        ])
+
+    def create_params_df(self):
+        """Create parameter DataFrame.
+        """
+        df_params = pd.DataFrame({
+            'params': ['alpha', 'sigma', 'gamma1', 'gamma2'],
+            'values': [self.alpha, self.sigma, self.gamma1, self.gamma2]
+        })
 
         return df_params

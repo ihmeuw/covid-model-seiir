@@ -10,3 +10,7 @@ clean:
 	find . -name "MANIFEST" | xargs rm -rf
 	find . -name "*.egg-info" | xargs rm -rf
 	find . -name ".pytest_cache" | xargs rm -rf
+
+
+install:
+	python setup.py install
