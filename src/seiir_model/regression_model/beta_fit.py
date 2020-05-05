@@ -57,10 +57,15 @@ class BetaRegressor:
 
 class BetaRegressorSequential:
 
-    def __init__(self, ordered_covmodel_sets, std):
-        assert len(ordered_covmodel_sets) == len(std)
+    def __init__(self, ordered_covmodel_sets, std=None):
+        if std is not None:
+            assert len(ordered_covmodel_sets) == len(std)
+            assert all([s > 0.0 for s in std])
+            self.std = copy.deepcopy(std)
+        else:
+            self.std = [-1.0] * len(ordered_covmodel_sets)
+        
         self.ordered_covmodel_sets = copy.deepcopy(ordered_covmodel_sets)
-        self.std = copy.deepcopy(std)
         self.col_covs = []
         for covmodel_set in self.ordered_covmodel_sets:
             self.col_covs.extend([covmodel.col_cov for covmodel in covmodel_set.cov_models])
@@ -71,6 +76,7 @@ class BetaRegressorSequential:
             self.col_covs.insert(0, 'intercept')
         else:
             covmodels = []
+        
         original_covmodels = copy.deepcopy(covmodels)
         while len(self.ordered_covmodel_sets) > 0:
             new_cov_models = self.ordered_covmodel_sets.pop(0).cov_models
@@ -81,12 +87,14 @@ class BetaRegressorSequential:
             regressor.fit_no_random(mr_data)
             if verbose:
                 print(regressor.cov_coef_fixed)
-            # std = self.std.pop(0)
-            for covmodel, coef in zip(covmodel_set.cov_models[len(covmodels):], regressor.cov_coef_fixed[len(covmodels):]):
-                # covmodel.gprior = [coef, std]
-                covmodel.bounds = np.array([coef, coef])
-            covmodels = covmodel_set.cov_models
 
+            std = self.std.pop(0)
+            for covmodel, coef in zip(covmodel_set.cov_models[len(covmodels):], regressor.cov_coef_fixed[len(covmodels):]):
+                if std > 0.0:
+                    covmodel.gprior = [coef, std]
+                else:
+                    covmodel.bounds = np.array([coef, coef])
+            covmodels = covmodel_set.cov_models
         self.regressor = BetaRegressor(CovModelSet(original_covmodels))
         self.regressor.fit(mr_data)
         self.cov_coef = self.regressor.cov_coef
