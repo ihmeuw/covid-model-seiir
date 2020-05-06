@@ -6,6 +6,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.dates as mdates
+import matplotlib.patheffects as pe
 
 # TODO: This is my local copy of Directories
 # from seiir_model.visualizer.versioner import Directories
@@ -62,30 +63,35 @@ class Visualizer:
             'location_name'].to_dict()
 
         # read beta regression draws
-        for filename in os.listdir(directories.regression_beta_fit_dir):
-            if filename.startswith("fit_draw_") and filename.endswith(".csv"):
-                draw_df = pd.read_csv(os.path.join(directories.regression_beta_fit_dir, filename))
-                for group in self.groups:
-                    self.data[group][ODE_BETA_FIT].append(draw_df[draw_df[col_group] == group])
-            else:
-                continue
+        for group in groups:
+            path_to_regression_draws_for_group = os.path.join(directories.regression_beta_fit_dir, str(group))
+            if os.path.isdir(path_to_regression_draws_for_group):
+                for filename in os.listdir(directories.regression_beta_fit_dir):
+                    if filename.startswith("fit_draw_") and filename.endswith(".csv"):
+                        draw_df = pd.read_csv(os.path.join(path_to_regression_draws_for_group, filename))
+                        # It's assumed that draw_df contains only the `group` group exclusively
+                        self.data[group][ODE_BETA_FIT].append(draw_df)
+                    else:
+                        continue
 
-        # read coefficients draws
-        for filename in os.listdir(directories.regression_coefficient_dir):
-            if filename.startswith("coefficients_") and filename.endswith(".csv"):
-                draw_df = pd.read_csv(os.path.join(directories.regression_coefficient_dir, filename))
-                for group in self.groups:
-                    self.data[group][COEFFICIENTS_FIT].append(draw_df[draw_df['group_id'] == group])
-            else:
-                continue
+        # Params and coefficients are commented out because Peng does not use them curently.
 
-        # read params draws
-        for filename in os.listdir(directories.regression_parameters_dir):
-            if filename.startswith("params_draw_") and filename.endswith(".csv"):
-                draw_df = pd.read_csv(os.path.join(directories.regression_parameters_dir, filename))
-                self.params_for_draws.append(draw_df)
-            else:
-                continue
+        # # read coefficients draws
+        # for filename in os.listdir(directories.regression_coefficient_dir):
+        #     if filename.startswith("coefficients_") and filename.endswith(".csv"):
+        #         draw_df = pd.read_csv(os.path.join(directories.regression_coefficient_dir, filename))
+        #         for group in self.groups:
+        #             self.data[group][COEFFICIENTS_FIT].append(draw_df[draw_df['group_id'] == group])
+        #     else:
+        #         continue
+        #
+        # # read params draws
+        # for filename in os.listdir(directories.regression_parameters_dir):
+        #     if filename.startswith("params_draw_") and filename.endswith(".csv"):
+        #         draw_df = pd.read_csv(os.path.join(directories.regression_parameters_dir, filename))
+        #         self.params_for_draws.append(draw_df)
+        #     else:
+        #         continue
 
         # read components forecast
         for group in groups:
@@ -136,9 +142,9 @@ class Visualizer:
             now_date = np.datetime64(now_date, 'D')
             ylims = ax.get_ylim()
             ax.plot([now_date, now_date], ylims, linestyle="dashed", c='black')
-            middle_level = np.mean(ylims)
-            ax.text(now_date - np.timedelta64(8, 'D'), middle_level, "Past")
-            ax.text(now_date + np.timedelta64(2, 'D'), middle_level, "Future")
+            label_level = 0.9*ylims[0] + 0.1*ylims[1]
+            ax.text(now_date - np.timedelta64(8, 'D'), label_level, "Past")
+            ax.text(now_date + np.timedelta64(2, 'D'), label_level, "Future")
 
     def plot_ode_compartment(self, group, ax,
                              compartment="I1",
@@ -224,7 +230,8 @@ class Visualizer:
                                 output_dir="plots",
                                 linestyle="solid",
                                 transparency=0.1,
-                                color=('orange', 'red', 'blue')):
+                                color=('orange', 'red', 'blue'),
+                                quantiles = (0.05, 0.95)):
         compartment_to_col = {
             'Cases': OUTPUT_DRAWS_CASES,
             'Deaths': OUTPUT_DRAWS_DEATHS,
@@ -232,7 +239,7 @@ class Visualizer:
         }
         # TODO: comment 2 and uncomment 1 for cluster
         group_name = self.id2loc[group]
-        # group_name = self.metadata[self.metadata['location_id'] == group]['location_name'].to_list()[0]
+        #group_name = self.metadata[self.metadata['location_id'] == group]['location_name'].to_list()[0]
         fig = plt.figure(figsize=(12, (3) * 6))
         grid = plt.GridSpec(3, 1, wspace=0.1, hspace=0.4)
         fig.autofmt_xdate()
@@ -245,18 +252,35 @@ class Visualizer:
             end_date = time.to_list()[-1]
             now_date = pd.to_datetime(compartment_data[compartment_data['observed'] == 1][self.col_date]).to_list()[-1]
             draw_num = 0
+            draws = []
             while f"draw_{draw_num}" in compartment_data.columns:
                 draw_name = f"draw_{draw_num}"
+                draws.append(compartment_data[draw_name].to_numpy())
                 if compartment == "R_effective":
                     if R_effective_in_log is True:
                         ax.semilogy(time, compartment_data[draw_name], linestyle=linestyle, c=color[i], alpha=transparency)
                     else:
                         ax.plot(time, compartment_data[draw_name], linestyle=linestyle, c=color[i], alpha=transparency)
-                    ax.plot([start_date, end_date], [1, 1], linestyle='--', c="black")
                 else:
                     ax.plot(time, compartment_data[draw_name], linestyle=linestyle,
                             c=color[i], alpha=transparency)
                 draw_num += 1
+
+            # plot mean and std
+            mean_draw = np.nanmean(draws, axis=0)
+            low_quantile = np.nanquantile(draws, quantiles[0], axis=0)
+            high_quantile = np.nanquantile(draws, quantiles[1], axis=0)
+            if compartment == "R_effective":
+                ax.plot([start_date, end_date], [1, 1], linestyle='--', c="black")
+            if compartment == "R_effective" and R_effective_in_log is True:
+                ax.semilogy(time, mean_draw, linestyle="-", c="black", alpha=1, linewidth=1.5)
+                ax.semilogy(time, low_quantile, linestyle="-.", c="black", alpha=1, linewidth=1.5)
+                ax.semilogy(time, high_quantile, linestyle="-.", c="black", alpha=1, linewidth=1.5)
+            else:
+                ax.plot(time, mean_draw, linestyle="-", c="black", alpha=1, linewidth=1.5)
+                ax.plot(time, low_quantile, linestyle="-.", c="black", alpha=1, linewidth=1.5)
+                ax.plot(time, high_quantile, linestyle="-.", c="black", alpha=1, linewidth=1.5)
+
             self.format_x_axis(ax, start_date=start_date, now_date=now_date, end_date=end_date,
                                major_tick_interval_days=14)
             ax.set_title(f"{group_name}: {compartment}")
@@ -420,10 +444,10 @@ if __name__ == "__main__":
     visualizer = Visualizer(directories, groups=groups, col_date=col_date, col_group=col_group)
 
     for group in groups:
-        visualizer.create_trajectories_plot(group=group,
-                                            # TODO: change when add plotting dirs to the directories object
-                                            # output_dir = directories.get_trajectories_plot_dir
-                                            output_dir=".")
+       # visualizer.create_trajectories_plot(group=group,
+       #                                      # TODO: change when add plotting dirs to the directories object
+       #                                      # output_dir = directories.get_trajectories_plot_dir
+       #                                      output_dir=".")
         visualizer.create_final_draws_plot(group=group,
                                            # TODO: Same
                                            output_dir=".")
