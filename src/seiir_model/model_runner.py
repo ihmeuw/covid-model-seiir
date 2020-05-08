@@ -49,9 +49,9 @@ class ModelRunner:
         # save other parameters
         self.get_beta_ode_params().to_csv(params_file, index=False)
 
-    def fit_beta_regression(self, ordered_covmodel_sets, mr_data, path, std=1.0):
+    def fit_beta_regression(self, ordered_covmodel_sets, mr_data, path, add_intercept, save_residuals, std):
         regressor = BetaRegressorSequential(ordered_covmodel_sets, std)
-        regressor.fit(mr_data)
+        regressor.fit(mr_data, add_intercept=add_intercept, save_residuals=save_residuals)
         regressor.save_coef(path)
 
     def predict_beta_forward(self, covmodel_set, df_cov, df_cov_coef, col_t, col_group, col_beta='beta_pred'):
@@ -69,7 +69,7 @@ class ModelRunner:
         return cov_temp, cov_testing, cov_pop_density, cov_mobility, cov_intercept
 
     def fit_beta_regression_prod(self, ordered_covmodel_sets, mr_data, path, std=1.0):
-        self.fit_beta_regression(ordered_covmodel_sets, mr_data, path, std)
+        self.fit_beta_regression(ordered_covmodel_sets, mr_data, path, save_residuals=True, add_intercept=True, std=std)
 
     def predict_beta_forward_prod(self, covmodel_set, df_cov, df_cov_coef,
                                   col_t, col_group, avg_window=0):
