@@ -64,7 +64,7 @@ class BetaRegressorSequential:
         for covmodel_set in self.ordered_covmodel_sets:
             self.col_covs.extend([covmodel.col_cov for covmodel in covmodel_set.cov_models])
     
-    def fit(self, mr_data, verbose=False, add_intercept=True):
+    def fit(self, mr_data, verbose=False, add_intercept=True, save_residuals=False):
         if add_intercept:
             covmodels = [CovModel(col_cov='intercept', use_re=True, re_var=np.inf)]
             self.col_covs.insert(0, 'intercept')
@@ -81,6 +81,11 @@ class BetaRegressorSequential:
             regressor.fit_no_random(mr_data)
             if verbose:
                 print(regressor.cov_coef_fixed)
+            if save_residuals:
+                used_covs = [covmodel.col_cov for covmodel in covmodel_set.cov_models]
+                mr_data.df['_'.join(used_covs)] = (
+                    mr_data.df[mr_data.col_obs].to_numpy() - regressor.covmodel_set_fixed.predict(regressor.cov_coef_fixed)
+                )
 
             for covmodel, coef in zip(covmodel_set.cov_models[len(covmodels):], regressor.cov_coef_fixed[len(covmodels):]):
                 input_bounds[covmodel.col_cov] = covmodel.bounds
@@ -97,6 +102,10 @@ class BetaRegressorSequential:
         self.regressor = BetaRegressor(CovModelSet(covmodels))
         self.regressor.fit(mr_data)
         self.cov_coef = self.regressor.cov_coef
+        if save_residuals:
+            mr_data.df['_'.join(self.col_covs)] = (
+                mr_data.df[mr_data.col_obs].to_numpy() - self.regressor.covmodel_set.predict(self.cov_coef)
+            )
 
     def save_coef(self, path):
         self.regressor.save_coef(path)
