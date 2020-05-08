@@ -29,6 +29,7 @@ class BetaRegressor:
         self.mr_model = MRModel(mr_data, self.covmodel_set) 
         self.mr_model.fit_model()
         self.cov_coef = self.mr_model.result
+        self.raw_cov_coef = self.mr_model.opt_result.x
 
     def save_coef(self, path):
         df = pd.DataFrame.from_dict(self.cov_coef, orient='index')
@@ -83,7 +84,7 @@ class BetaRegressorSequential:
                 print(regressor.cov_coef_fixed)
             if save_residuals:
                 used_covs = [covmodel.col_cov for covmodel in covmodel_set.cov_models]
-                mr_data.df['_'.join(used_covs)] = (
+                mr_data.df['_'.join(used_covs) + '_residual'] = (
                     mr_data.df[mr_data.col_obs].to_numpy() - regressor.covmodel_set_fixed.predict(regressor.cov_coef_fixed)
                 )
 
@@ -103,8 +104,8 @@ class BetaRegressorSequential:
         self.regressor.fit(mr_data)
         self.cov_coef = self.regressor.cov_coef
         if save_residuals:
-            mr_data.df['_'.join(self.col_covs)] = (
-                mr_data.df[mr_data.col_obs].to_numpy() - self.regressor.covmodel_set.predict(self.cov_coef)
+            mr_data.df['_'.join(self.col_covs)+'_residual'] = (
+                mr_data.df[mr_data.col_obs].to_numpy() - self.regressor.covmodel_set.predict(self.regressor.raw_cov_coef)
             )
 
     def save_coef(self, path):
