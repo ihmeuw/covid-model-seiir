@@ -210,7 +210,6 @@ class SingleGroupODEProcess:
         # fit I1
         self.step_ode_sys.update_given_params(c=self.gamma1)
         # modify initial condition of I1
-        I1_org = self.init_cond['I1']
         self.init_cond.update({
             'I1': (self.rhs_newE[0]/5.0)**(1.0/self.alpha)
         })
