@@ -69,8 +69,8 @@ class SingleGroupODEProcess:
         idx = date < self.today + np.timedelta64(self.day_shift -
                                                  self.lag_days, 'D')
 
-        start_date = date[df[col_cases] > 0.0].min()
-        idx = idx & (date > start_date)
+        start_date = date[df[col_cases] >= 50.0].min()
+        idx = idx & (date >= start_date)
         self.df = df[idx].copy()
         date = date[idx]
 
@@ -212,7 +212,7 @@ class SingleGroupODEProcess:
         # modify initial condition of I1
         I1_org = self.init_cond['I1']
         self.init_cond.update({
-            'I1': max(I1_org, (self.rhs_newE[0]/3.0)**(1.0/self.alpha))
+            'I1': (self.rhs_newE[0]/5.0)**(1.0/self.alpha)
         })
         I1 = self.step_ode_sys.simulate(self.t_params,
                                         np.array([self.init_cond['I1']]),
