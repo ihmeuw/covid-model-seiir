@@ -69,10 +69,17 @@ class SingleGroupODEProcess:
         idx = date < self.today + np.timedelta64(self.day_shift -
                                                  self.lag_days, 'D')
 
-        start_date = date[df[col_cases] >= 20.0].min()
-        idx = idx & (date >= start_date)
-        self.df = df[idx].copy()
-        date = date[idx]
+        cases_threshold = 50.0
+        start_date = date[df[col_cases] >= cases_threshold].min()
+        idx_final = idx & (date >= start_date)
+        while not any(idx_final):
+            cases_threshold *= 0.5
+            start_date = date[df[col_cases] >= cases_threshold].min()
+            idx_final = idx & (date >= start_date)
+            if cases_threshold < 1e-6:
+                break
+        self.df = df[idx_final].copy()
+        date = date[idx_final]
 
         # compute days
         self.col_days = 'days'
