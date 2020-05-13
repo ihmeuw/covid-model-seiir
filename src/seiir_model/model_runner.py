@@ -49,12 +49,12 @@ class ModelRunner:
         # save other parameters
         self.get_beta_ode_params().to_csv(params_file, index=False)
 
-    def fit_beta_regression(self, ordered_covmodel_sets, mr_data, path, std=1.0):
-        regressor = BetaRegressorSequential(ordered_covmodel_sets, std)
-        regressor.fit(mr_data)
+    def fit_beta_regression(self, ordered_covmodel_sets, mr_data, path, add_intercept=True, std=1.0):
+        regressor = BetaRegressorSequential(ordered_covmodel_sets, default_std=std)
+        regressor.fit(mr_data, verbose=True, add_intercept=add_intercept)
         regressor.save_coef(path)
 
-    def predict_beta_forward(self, covmodel_set, df_cov, df_cov_coef, col_t, col_group, col_beta='beta_pred'):
+    def predict_beta_forward(self, covmodel_set, df_cov, df_cov_coef, col_t, col_group, col_beta='ln_beta_pred'):
         regressor = BetaRegressor(covmodel_set)
         regressor.load_coef(df=df_cov_coef)
         return predict(regressor, df_cov, col_t, col_group, col_beta)
@@ -68,8 +68,27 @@ class ModelRunner:
         cov_intercept = CovModel(col_cov='intercept', use_re=True, re_var=np.inf)
         return cov_temp, cov_testing, cov_pop_density, cov_mobility, cov_intercept
 
-    def fit_beta_regression_prod(self, ordered_covmodel_sets, mr_data, path, std=1.0):
-        self.fit_beta_regression(ordered_covmodel_sets, mr_data, path, std)
+    def fit_beta_regression_prod(self, ordered_covmodel_sets, mr_data, path, df_cov_coef=None, std=1.0, add_intercept=True):
+        if df_cov_coef is None:
+            self.fit_beta_regression(ordered_covmodel_sets, mr_data, path, add_intercept=add_intercept, std=std)
+        else:
+            covmodels = []
+            if add_intercept: 
+                covmodels.append(CovModel(col_cov='intercept', use_re=True, re_var=np.inf))
+            for covmodel_set in ordered_covmodel_sets:
+                covmodels.extend(covmodel_set.cov_models)
+            covmodels_set_comb = CovModelSet(covmodels)
+            regressor = BetaRegressor(covmodels_set_comb)
+            coef_values = df_cov_coef[[covmodel.col_cov for covmodel in covmodels]].to_numpy()
+
+            for i, covmodel in enumerate(covmodels_set_comb.cov_models):
+                if covmodel.use_re:
+                    covmodel.gprior = np.array([np.mean(coef_values[:, i]), np.std(coef_values[:, i])])
+                else:
+                    covmodel.bounds = np.array([np.mean(coef_values[:, i])] * 2)        
+            regressor.fit(mr_data)
+            print(regressor.cov_coef)
+            regressor.save_coef(path)
 
     def predict_beta_forward_prod(self, covmodel_set, df_cov, df_cov_coef,
                                   col_t, col_group, avg_window=0):

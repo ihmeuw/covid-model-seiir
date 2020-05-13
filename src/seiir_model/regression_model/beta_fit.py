@@ -12,7 +12,7 @@ class BetaRegressor:
         self.covmodel_set = covmodel_set
         self.col_covs = [covmodel.col_cov for covmodel in covmodel_set.cov_models]
 
-    def fit_no_random(self, mr_data):
+    def fit_no_random(self, mr_data, verbose=True):
         self.covmodel_set_fixed = copy.deepcopy(self.covmodel_set)
         for covmodel in self.covmodel_set_fixed.cov_models:
             covmodel.use_re = False 
@@ -20,15 +20,23 @@ class BetaRegressor:
 
         self.mr_model_fixed = MRModel(mr_data, self.covmodel_set_fixed)
         self.mr_model_fixed.fit_model()
-        # cov_coef_fixed = list(self.mr_model_fixed.result.values())
-        # for coef in cov_coef_fixed[1:]:
-        #     assert np.linalg.norm(coef - cov_coef_fixed[0]) < 1e-10
-        self.cov_coef_fixed = list(self.mr_model_fixed.result.values())[0]
 
-    def fit(self, mr_data):        
+        y = mr_data.df[mr_data.col_obs].to_numpy()
+        X = mr_data.df[[covmodel.col_cov for covmodel in self.covmodel_set_fixed.cov_models]].to_numpy()
+        s = mr_data.df[mr_data.col_obs_se].to_numpy()
+        coef = np.linalg.solve(np.dot(np.transpose(X)/s**2, X), np.dot(np.transpose(X)/s**2, y))
+        self.cov_coef_fixed = list(self.mr_model_fixed.result.values())[0]
+        if verbose:
+            print('by hand', coef)
+            print('from slime', self.cov_coef_fixed)
+
+    def fit(self, mr_data, verbose=False):        
         self.mr_model = MRModel(mr_data, self.covmodel_set) 
         self.mr_model.fit_model()
         self.cov_coef = self.mr_model.result
+        if verbose:
+            print(self.cov_coef)
+            print()
 
     def save_coef(self, path):
         df = pd.DataFrame.from_dict(self.cov_coef, orient='index')
@@ -78,7 +86,7 @@ class BetaRegressorSequential:
             covmodel_set = CovModelSet(covmodels + new_cov_models)
             
             regressor = BetaRegressor(covmodel_set)
-            regressor.fit_no_random(mr_data)
+            regressor.fit_no_random(mr_data, verbose=verbose)
             if verbose:
                 print(regressor.cov_coef_fixed)
 
@@ -92,10 +100,11 @@ class BetaRegressorSequential:
             covmodels = covmodel_set.cov_models
         
         for covmodel in covmodels:
-            covmodel.bounds = input_bounds[covmodel.col_cov]
+            if covmodel.use_re:
+                covmodel.bounds = input_bounds[covmodel.col_cov]
 
         self.regressor = BetaRegressor(CovModelSet(covmodels))
-        self.regressor.fit(mr_data)
+        self.regressor.fit(mr_data, verbose)
         self.cov_coef = self.regressor.cov_coef
 
     def save_coef(self, path):

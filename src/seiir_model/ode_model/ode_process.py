@@ -22,7 +22,7 @@ class SingleGroupODEProcess:
                  col_cases,
                  col_pop,
                  col_loc_id,
-                 day_shift=8,
+                 day_shift=(8,)*2,
                  lag_days=17,
                  alpha=(0.95,)*2,
                  sigma=(0.2,)*2,
@@ -40,7 +40,7 @@ class SingleGroupODEProcess:
             col_pop (str): Column with population.
             col_loc_id (str): Column with location id.
             peak_date (str | None): Column with the peaked date.
-            day_shift (int, optional): Days shift for the data sub-selection.
+            day_shift (arraylike): Days shift for the data sub-selection.
             alpha (arraylike): bounds for uniformly sampling alpha.
             sigma (arraylike): bounds for uniformly sampling sigma.
             gamma1 (arraylike): bounds for uniformly sampling gamma1.
@@ -60,36 +60,7 @@ class SingleGroupODEProcess:
         self.col_pop = col_pop
         self.col_loc_id = col_loc_id
 
-        # subset the data
-        self.day_shift = day_shift
-        self.lag_days = lag_days
-        df.sort_values(self.col_date, inplace=True)
-        date = pd.to_datetime(df[col_date])
-        self.today = np.datetime64(datetime.today())
-        idx = date < self.today + np.timedelta64(self.day_shift -
-                                                 self.lag_days, 'D')
-
-        cases_threshold = 50.0
-        start_date = date[df[col_cases] >= cases_threshold].min()
-        idx_final = idx & (date >= start_date)
-        while not any(idx_final):
-            cases_threshold *= 0.5
-            start_date = date[df[col_cases] >= cases_threshold].min()
-            idx_final = idx & (date >= start_date)
-            if cases_threshold < 1e-6:
-                break
-        self.df = df[idx_final].copy()
-        date = date[idx_final]
-
-        # compute days
-        self.col_days = 'days'
-        self.df[self.col_days] = (date - date.min()).dt.days.values
-
-        # parse input
-        self.date = self.df[self.col_date]
-        self.t = self.df[self.col_days].values
-        self.obs = self.df[self.col_cases].values
-        self.loc_id = self.df[self.col_loc_id].values[0]
+        self.loc_id = df[self.col_loc_id].values[0]
 
         # ODE parameters
         assert len(alpha) == 2 and \
@@ -112,6 +83,48 @@ class SingleGroupODEProcess:
             'I2': 0.0,
             'R': 0.0
         }
+
+        assert len(day_shift) == 2 and \
+            0.0 <= day_shift[0] <= day_shift[1]
+
+        # subset the data
+        self.day_shift = int(np.random.uniform(*day_shift))
+        self.lag_days = lag_days
+        df.sort_values(self.col_date, inplace=True)
+        date = pd.to_datetime(df[col_date])
+        self.today = np.datetime64(datetime.today())
+        idx = date < self.today + np.timedelta64(self.day_shift -
+                                                 self.lag_days, 'D')
+
+        cases_threshold = 50.0
+        start_date = date[df[col_cases] >= cases_threshold].min()
+        idx_final = idx & (date >= start_date)
+        while not any(idx_final):
+            cases_threshold *= 0.5
+            print(f'reduce cases threshold for {self.loc_id} to'
+                  f'{cases_threshold}')
+            start_date = date[df[col_cases] >= cases_threshold].min()
+            idx_final = idx & (date >= start_date)
+            if cases_threshold < 1e-6:
+                break
+        if np.sum(idx_final) < 2:
+            cases_threshold = 0.0
+            start_date = date[df[col_cases] > cases_threshold].min()
+            idx_final = idx & (date > start_date)
+        self.df = df[idx_final].copy()
+        date = date[idx_final]
+
+        # compute days
+        self.col_days = 'days'
+        self.df[self.col_days] = (date - date.min()).dt.days.values
+
+        # parse input
+        self.date = self.df[self.col_date]
+        self.t = self.df[self.col_days].values
+        self.obs = self.df[self.col_cases].values
+
+
+
 
         # ode solver setup
         self.solver_class = solver_class
@@ -326,7 +339,7 @@ class ODEProcessInput:
     gamma2: Tuple
     solver_dt: float
     spline_options: Dict
-    day_shift: int
+    day_shift: Tuple
 
 
 class ODEProcess:
@@ -345,22 +358,18 @@ class ODEProcess:
         self.col_loc_id = input.col_loc_id
         self.col_lag_days = input.col_lag_days
 
-        self.alpha = input.alpha
-        self.sigma = input.sigma
-        self.gamma1 = input.gamma1
-        self.gamma2 = input.gamma2
         self.solver_dt = input.solver_dt
         self.spline_options = input.spline_options
-        self.day_shift = input.day_shift
 
         # create the location id
         self.loc_ids = np.sort(list(self.df_dict.keys()))
 
         # sampling the parameters here
-        self.alpha = np.random.uniform(*self.alpha)
-        self.sigma = np.random.uniform(*self.sigma)
-        self.gamma1 = np.random.uniform(*self.gamma1)
-        self.gamma2 = np.random.uniform(*self.gamma2)
+        self.alpha = np.random.uniform(*input.alpha)
+        self.sigma = np.random.uniform(*input.sigma)
+        self.gamma1 = np.random.uniform(*input.gamma1)
+        self.gamma2 = np.random.uniform(*input.gamma2)
+        self.day_shift = int(np.random.uniform(*input.day_shift))
 
         # lag days
         self.lag_days = self.df_dict[self.loc_ids[0]][
@@ -374,7 +383,7 @@ class ODEProcess:
                 self.col_cases,
                 self.col_pop,
                 self.col_loc_id,
-                day_shift=self.day_shift,
+                day_shift=(self.day_shift,)*2,
                 lag_days=self.lag_days,
                 alpha=(self.alpha,)*2,
                 sigma=(self.sigma,)*2,
