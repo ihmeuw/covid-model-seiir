@@ -75,17 +75,10 @@ class SingleGroupODEProcess:
         self.sigma = np.random.uniform(*sigma)
         self.gamma1 = np.random.uniform(*gamma1)
         self.gamma2 = np.random.uniform(*gamma2)
-        self.N = self.df[self.col_pop].values[0]
-        self.init_cond = {
-            'S': self.N,
-            'E': self.obs[0],
-            'I1': 1.0,
-            'I2': 0.0,
-            'R': 0.0
-        }
+        self.N = df[self.col_pop].values[0]
 
         assert len(day_shift) == 2 and \
-            0.0 <= day_shift[0] <= day_shift[1]
+            day_shift[0] <= day_shift[1]
 
         # subset the data
         self.day_shift = int(np.random.uniform(*day_shift))
@@ -122,9 +115,13 @@ class SingleGroupODEProcess:
         self.date = self.df[self.col_date]
         self.t = self.df[self.col_days].values
         self.obs = self.df[self.col_cases].values
-
-
-
+        self.init_cond = {
+            'S': self.N,
+            'E': self.obs[0],
+            'I1': 1.0,
+            'I2': 0.0,
+            'R': 0.0
+        }
 
         # ode solver setup
         self.solver_class = solver_class
