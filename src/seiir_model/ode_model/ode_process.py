@@ -86,8 +86,9 @@ class SingleGroupODEProcess:
         df.sort_values(self.col_date, inplace=True)
         date = pd.to_datetime(df[col_date])
         self.today = np.datetime64(datetime.today())
-        idx = date < self.today + np.timedelta64(self.day_shift -
-                                                 self.lag_days, 'D')
+        end_date = self.today + np.timedelta64(self.day_shift -
+                                               self.lag_days, 'D')
+        idx = date < end_date
 
         cases_threshold = 50.0
         start_date = date[df[col_cases] >= cases_threshold].min()
@@ -104,6 +105,12 @@ class SingleGroupODEProcess:
             cases_threshold = 0.0
             start_date = date[df[col_cases] > cases_threshold].min()
             idx_final = idx & (date > start_date)
+
+        assert np.sum(idx_final) > 2, \
+            f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a ' \
+            f'spline. Number of data between date {start_date} and {end_date}' \
+            f' is {np.sum(idx_final)}.'
+
         self.df = df[idx_final].copy()
         date = date[idx_final]
 
@@ -321,6 +328,7 @@ class SingleGroupODEProcess:
 
         return df_params
 
+
 @dataclass
 class ODEProcessInput:
     df_dict: Dict
@@ -373,25 +381,34 @@ class ODEProcess:
             self.col_lag_days].values[0]
 
         # create model for each location
-        self.models = {
-            loc_id: SingleGroupODEProcess(
-                self.df_dict[loc_id],
-                self.col_date,
-                self.col_cases,
-                self.col_pop,
-                self.col_loc_id,
-                day_shift=(self.day_shift,)*2,
-                lag_days=self.lag_days,
-                alpha=(self.alpha,)*2,
-                sigma=(self.sigma,)*2,
-                gamma1=(self.gamma1,)*2,
-                gamma2=(self.gamma2,)*2,
-                solver_class=RK4,
-                solver_dt=self.solver_dt,
-                spline_options=self.spline_options
+        self.models = {}
+        errors = []
+        for loc_id in self.loc_ids:
+            try:
+                self.models[loc_id] = SingleGroupODEProcess(
+                    self.df_dict[loc_id],
+                    self.col_date,
+                    self.col_cases,
+                    self.col_pop,
+                    self.col_loc_id,
+                    day_shift=(self.day_shift,)*2,
+                    lag_days=self.lag_days,
+                    alpha=(self.alpha,)*2,
+                    sigma=(self.sigma,)*2,
+                    gamma1=(self.gamma1,)*2,
+                    gamma2=(self.gamma2,)*2,
+                    solver_class=RK4,
+                    solver_dt=self.solver_dt,
+                    spline_options=self.spline_options
+                )
+            except AssertionError:
+                errors.append(loc_id)
+
+        if errors:
+            raise RuntimeError(
+                "SingleGroupODEProcess failed to initialize for 1 or more locations in "
+                f"ODEProcess. Locations are: {errors}."
             )
-            for loc_id in self.loc_ids
-        }
 
     def process(self):
         """Process all models.
