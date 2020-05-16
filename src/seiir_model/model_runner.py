@@ -91,7 +91,6 @@ class ModelRunner:
 
     def predict_beta_forward_prod(self, covmodel_set, df_cov, df_cov_coef,
                                   col_t, col_group, avg_window=0):
-        covmodel_set.cov_models.insert(0, CovModel(col_cov='intercept', use_re=True, re_var=np.inf))
         df = self.predict_beta_forward(covmodel_set, df_cov, df_cov_coef, col_t, col_group, 'ln_beta_pred')
         beta_pred = np.exp(df['ln_beta_pred']).values[None, :]
         beta_pred = convolve_mean(beta_pred, radius=[0, avg_window])
