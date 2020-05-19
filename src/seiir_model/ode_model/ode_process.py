@@ -14,14 +14,13 @@ from odeopt.core.utils import linear_interpolate
 from .spline_fit import SplineFit
 
 
-
-
 class SingleGroupODEProcess:
     def __init__(self, df,
                  col_date,
                  col_cases,
                  col_pop,
                  col_loc_id,
+                 today=np.datetime64(datetime.today()),
                  day_shift=(8,)*2,
                  lag_days=17,
                  alpha=(0.95,)*2,
@@ -39,7 +38,7 @@ class SingleGroupODEProcess:
             col_cases (str): Column with new infectious data.
             col_pop (str): Column with population.
             col_loc_id (str): Column with location id.
-            peak_date (str | None): Column with the peaked date.
+            today (np.datetime64): Indicating when "today" is. Defaults to the actual today.
             day_shift (arraylike): Days shift for the data sub-selection.
             alpha (arraylike): bounds for uniformly sampling alpha.
             sigma (arraylike): bounds for uniformly sampling sigma.
@@ -81,11 +80,11 @@ class SingleGroupODEProcess:
             day_shift[0] <= day_shift[1]
 
         # subset the data
+        self.today = today
         self.day_shift = int(np.random.uniform(*day_shift))
         self.lag_days = lag_days
         df.sort_values(self.col_date, inplace=True)
         date = pd.to_datetime(df[col_date])
-        self.today = np.datetime64(datetime.today())
         idx = date < self.today + np.timedelta64(self.day_shift -
                                                  self.lag_days, 'D')
 
