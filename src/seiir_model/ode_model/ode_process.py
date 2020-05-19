@@ -382,7 +382,7 @@ class ODEProcess:
             self.col_lag_days].values[0]
         self.today_dict = {
             loc_id: np.datetime64(
-                self.df_dict[loc_id][self.df_dict[loc_id][self.col_observed] == 1, self.col_date].max()
+                self.df_dict[loc_id].loc[self.df_dict[loc_id][self.col_observed] == 1, self.col_date].max()
             )
             for loc_id in self.loc_ids
         }
