@@ -320,6 +320,7 @@ class SingleGroupODEProcess:
 
         return df_params
 
+
 @dataclass
 class ODEProcessInput:
     df_dict: Dict
@@ -328,6 +329,7 @@ class ODEProcessInput:
     col_pop: str
     col_loc_id: str
     col_lag_days: str
+    col_observed: str
 
     alpha: Tuple
     sigma: Tuple
@@ -353,6 +355,7 @@ class ODEProcess:
         self.col_pop = input.col_pop
         self.col_loc_id = input.col_loc_id
         self.col_lag_days = input.col_lag_days
+        self.col_observed = input.col_observed
 
         self.solver_dt = input.solver_dt
         self.spline_options = input.spline_options
@@ -370,6 +373,12 @@ class ODEProcess:
         # lag days
         self.lag_days = self.df_dict[self.loc_ids[0]][
             self.col_lag_days].values[0]
+        self.today_dict = {
+            loc_id: np.datetime64(
+                self.df_dict[loc_id][self.df_dict[loc_id][self.col_observed] == 1, self.col_date].max()
+            )
+            for loc_id in self.loc_ids
+        }
 
         # create model for each location
         self.models = {
@@ -387,7 +396,8 @@ class ODEProcess:
                 gamma2=(self.gamma2,)*2,
                 solver_class=RK4,
                 solver_dt=self.solver_dt,
-                spline_options=self.spline_options
+                spline_options=self.spline_options,
+                today=self.today_dict[loc_id]
             )
             for loc_id in self.loc_ids
         }
