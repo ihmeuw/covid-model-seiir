@@ -69,30 +69,28 @@ class ModelRunner:
         return cov_temp, cov_testing, cov_pop_density, cov_mobility, cov_intercept
 
     def fit_beta_regression_prod(self, ordered_covmodel_sets, mr_data, path, df_cov_coef=None, std=1.0, add_intercept=True):
-        if df_cov_coef is None:
-            self.fit_beta_regression(ordered_covmodel_sets, mr_data, path, add_intercept=add_intercept, std=std)
-        else:
-            covmodels = []
-            if add_intercept: 
-                covmodels.append(CovModel(col_cov='intercept', use_re=True, re_var=np.inf))
-            for covmodel_set in ordered_covmodel_sets:
-                covmodels.extend(covmodel_set.cov_models)
-            covmodels_set_comb = CovModelSet(covmodels)
-            regressor = BetaRegressor(covmodels_set_comb)
+        covmodels = []
+        if add_intercept: 
+            covmodels.append(CovModel(col_cov='intercept', use_re=True, re_var=np.inf))
+        
+        for covmodel_set in ordered_covmodel_sets:
+            covmodels.extend(covmodel_set.cov_models)
+        covmodels_set_comb = CovModelSet(covmodels)
+        regressor = BetaRegressor(covmodels_set_comb)
+
+        if df_cov_coef is not None:
             coef_values = df_cov_coef[[covmodel.col_cov for covmodel in covmodels]].to_numpy()
 
             for i, covmodel in enumerate(covmodels_set_comb.cov_models):
-                if covmodel.use_re:
-                    covmodel.gprior = np.array([np.mean(coef_values[:, i]), np.std(coef_values[:, i])])
-                else:
-                    covmodel.bounds = np.array([np.mean(coef_values[:, i])] * 2)        
-            regressor.fit(mr_data)
-            print(regressor.cov_coef)
-            regressor.save_coef(path)
+                if not covmodel.use_re:
+                    covmodel.gprior[0] = np.mean(coef_values[:, i])
+        
+        regressor.fit(mr_data)
+        print(regressor.cov_coef)
+        regressor.save_coef(path)
 
     def predict_beta_forward_prod(self, covmodel_set, df_cov, df_cov_coef,
                                   col_t, col_group, avg_window=0):
-        covmodel_set.cov_models.insert(0, CovModel(col_cov='intercept', use_re=True, re_var=np.inf))
         df = self.predict_beta_forward(covmodel_set, df_cov, df_cov_coef, col_t, col_group, 'ln_beta_pred')
         beta_pred = np.exp(df['ln_beta_pred']).values[None, :]
         beta_pred = convolve_mean(beta_pred, radius=[0, avg_window])

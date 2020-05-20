@@ -14,14 +14,13 @@ from odeopt.core.utils import linear_interpolate
 from .spline_fit import SplineFit
 
 
-
-
 class SingleGroupODEProcess:
     def __init__(self, df,
                  col_date,
                  col_cases,
                  col_pop,
                  col_loc_id,
+                 today=np.datetime64(datetime.today()),
                  day_shift=(8,)*2,
                  lag_days=17,
                  alpha=(0.95,)*2,
@@ -39,7 +38,7 @@ class SingleGroupODEProcess:
             col_cases (str): Column with new infectious data.
             col_pop (str): Column with population.
             col_loc_id (str): Column with location id.
-            peak_date (str | None): Column with the peaked date.
+            today (np.datetime64): Indicating when "today" is. Defaults to the actual today.
             day_shift (arraylike): Days shift for the data sub-selection.
             alpha (arraylike): bounds for uniformly sampling alpha.
             sigma (arraylike): bounds for uniformly sampling sigma.
@@ -81,13 +80,14 @@ class SingleGroupODEProcess:
             day_shift[0] <= day_shift[1]
 
         # subset the data
+        self.today = today
         self.day_shift = int(np.random.uniform(*day_shift))
         self.lag_days = lag_days
         df.sort_values(self.col_date, inplace=True)
         date = pd.to_datetime(df[col_date])
-        self.today = np.datetime64(datetime.today())
-        idx = date < self.today + np.timedelta64(self.day_shift -
-                                                 self.lag_days, 'D')
+        end_date = self.today + np.timedelta64(self.day_shift -
+                                               self.lag_days, 'D')
+        idx = date < end_date
 
         cases_threshold = 50.0
         start_date = date[df[col_cases] >= cases_threshold].min()
@@ -104,6 +104,12 @@ class SingleGroupODEProcess:
             cases_threshold = 0.0
             start_date = date[df[col_cases] > cases_threshold].min()
             idx_final = idx & (date > start_date)
+
+        assert np.sum(idx_final) > 2, \
+            f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a ' \
+            f'spline. Number of data between date {start_date} and {end_date}' \
+            f' is {np.sum(idx_final)}.'
+
         self.df = df[idx_final].copy()
         date = date[idx_final]
 
@@ -330,6 +336,7 @@ class ODEProcessInput:
     col_pop: str
     col_loc_id: str
     col_lag_days: str
+    col_observed: str
 
     alpha: Tuple
     sigma: Tuple
@@ -355,6 +362,7 @@ class ODEProcess:
         self.col_pop = input.col_pop
         self.col_loc_id = input.col_loc_id
         self.col_lag_days = input.col_lag_days
+        self.col_observed = input.col_observed
 
         self.solver_dt = input.solver_dt
         self.spline_options = input.spline_options
@@ -372,6 +380,12 @@ class ODEProcess:
         # lag days
         self.lag_days = self.df_dict[self.loc_ids[0]][
             self.col_lag_days].values[0]
+        self.today_dict = {
+            loc_id: np.datetime64(
+                self.df_dict[loc_id].loc[self.df_dict[loc_id][self.col_observed] == 1, self.col_date].max()
+            )
+            for loc_id in self.loc_ids
+        }
 
         # create model for each location
         self.models = {}
@@ -392,7 +406,8 @@ class ODEProcess:
                     gamma2=(self.gamma2,)*2,
                     solver_class=RK4,
                     solver_dt=self.solver_dt,
-                    spline_options=self.spline_options
+                    spline_options=self.spline_options,
+                    today=self.today_dict[loc_id]
                 )
             except AssertionError:
                 errors.append(loc_id)
