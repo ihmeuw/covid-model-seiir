@@ -15,7 +15,8 @@ class SplineFit:
     def __init__(self, t, y,
                  spline_options=None,
                  se_power=1.0,
-                 space='ln daily'):
+                 space='ln daily',
+                 max_iter=50):
         """Constructor of the SplineFit
 
         Args:
@@ -27,6 +28,8 @@ class SplineFit:
                 A number between 0 and 1 that scale the standard error.
             space (str):
                 Which space is the spline fitting, assume y is daily cases.
+            max_iter (int):
+                Maximum number of iteration.
         """
         self.space = space
         assert self.space in ['daily', 'ln daily', 'cumul', 'ln cumul'], "spline_space must be one of 'daily'," \
@@ -87,11 +90,12 @@ class SplineFit:
         self.mr_model = MRBRT(data, cov_models=[intercept, time])
         self.spline = time.create_spline(data)
         self.spline_coef = None
+        self.max_iter = max_iter
 
     def fit_spline(self):
         """Fit the spline.
         """
-        self.mr_model.fit_model(inner_max_iter=30)
+        self.mr_model.fit_model(inner_max_iter=self.max_iter)
         self.spline_coef = self.mr_model.beta_soln
         self.spline_coef[1:] += self.spline_coef[0]
 
