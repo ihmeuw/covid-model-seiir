@@ -13,7 +13,8 @@ class SplineFit:
     """Spline fit class
     """
     def __init__(self, t, y,
-                 spline_options=None):
+                 spline_options=None,
+                 se_power=1.0):
         """Constructor of the SplineFit
 
         Args:
@@ -21,15 +22,20 @@ class SplineFit:
             y (np.ndarray): Dependent variable.
             spline_options (dict | None, optional):
                 Dictionary of spline prior options.
+            se_power (float):
+                A number between 0 and 1 that scale the standard error.
         """
         self.t = t
         self.y = y
         self.spline_options = {} if spline_options is None else spline_options
+        self.se_power = se_power
 
+        assert 0 <= self.se_power <= 1, "spline se_power has to be between 0 and 1."
+        y_se = 1.0/np.exp(self.y)**self.se_power
         # create mrbrt object
         df = pd.DataFrame({
             'y': self.y,
-            'y_se': 1.0/np.exp(self.y),
+            'y_se': y_se,
             't': self.t,
             'study_id': 1,
         })
