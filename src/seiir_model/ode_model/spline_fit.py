@@ -14,7 +14,8 @@ class SplineFit:
     """
     def __init__(self, t, y,
                  spline_options=None,
-                 se_power=1.0):
+                 se_power=1.0,
+                 space='ln daily'):
         """Constructor of the SplineFit
 
         Args:
@@ -24,14 +25,33 @@ class SplineFit:
                 Dictionary of spline prior options.
             se_power (float):
                 A number between 0 and 1 that scale the standard error.
+            space (str):
+                Which space is the spline fitting, assume y is daily cases.
         """
-        self.t = t
-        self.y = y
+        self.space = space
+        assert self.space in ['daily', 'ln daily', 'cumul', 'ln cumul'], "spline_space must be one of 'daily'," \
+                                                                         " 'ln daily', 'cumul', 'ln cumul' space."
+        if self.space == 'ln daily':
+            self.t = t[y > 0.0]
+            self.y = np.log(y[y > 0.0])
+        elif self.space == 'daily':
+            self.t = t
+            self.y = y
+        elif self.space == 'ln cumul':
+            y = np.cumsum(y)
+            self.t = t[y > 0.0]
+            self.y = np.log(y[y > 0.0])
+        else:
+            self.t = t
+            self.y = np.cumsum(y)
         self.spline_options = {} if spline_options is None else spline_options
         self.se_power = se_power
 
         assert 0 <= self.se_power <= 1, "spline se_power has to be between 0 and 1."
-        y_se = 1.0/np.exp(self.y)**self.se_power
+        if self.se_power == 0:
+            y_se = np.ones(self.t.size)
+        else:
+            y_se = 1.0/np.exp(self.y)**self.se_power
         # create mrbrt object
         df = pd.DataFrame({
             'y': self.y,
@@ -79,4 +99,14 @@ class SplineFit:
         """Predict the dependent variable, given independent variable.
         """
         mat = self.spline.design_mat(t)
-        return mat.dot(self.spline_coef)
+        y = mat.dot(self.spline_coef)
+
+        if self.space == 'ln daily':
+            return np.exp(y)
+        elif self.space == 'daily':
+            return y
+        elif self.space == 'ln cumul':
+            y = np.exp(y)
+            return np.insert(np.diff(y), 0, y[0])
+        elif self.space == 'cumul':
+            return np.insert(np.diff(y), 0, y[0])
