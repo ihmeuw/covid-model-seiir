@@ -13,7 +13,8 @@ class SplineFit:
     """Spline fit class
     """
     def __init__(self, t, y,
-                 spline_options=None):
+                 spline_options=None,
+                 se_space='linear'):
         """Constructor of the SplineFit
 
         Args:
@@ -21,15 +22,24 @@ class SplineFit:
             y (np.ndarray): Dependent variable.
             spline_options (dict | None, optional):
                 Dictionary of spline prior options.
+            se_space (str):
+                If 'linear' assume have same standard error in the linear space,
+                if 'log' assume have same standard error in the log space.
         """
         self.t = t
         self.y = y
         self.spline_options = {} if spline_options is None else spline_options
+        self.se_space = se_space
 
+        assert self.se_space in ['linear', 'log'], "spline se_space has to be linear or log."
+        if self.se_space == 'linear':
+            y_se = 1.0/np.exp(self.y)
+        else:
+            y_se = np.ones(self.y.size)
         # create mrbrt object
         df = pd.DataFrame({
             'y': self.y,
-            'y_se': 1.0/np.exp(self.y),
+            'y_se': y_se,
             't': self.t,
             'study_id': 1,
         })
