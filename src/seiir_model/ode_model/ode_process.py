@@ -87,7 +87,7 @@ class SingleGroupODEProcess:
         date = pd.to_datetime(df[col_date])
         end_date = self.today + np.timedelta64(self.day_shift -
                                                self.lag_days, 'D')
-        idx = date < end_date
+        idx = date <= end_date
 
         cases_threshold = 50.0
         start_date = date[df[col_cases] >= cases_threshold].min()
