@@ -29,7 +29,8 @@ class SingleGroupODEProcess:
                  gamma2=(0.5,)*2,
                  solver_class=RK4,
                  solver_dt=1e-1,
-                 spline_options=None):
+                 spline_options=None,
+                 reff_init=20.0):
         """Constructor of the SingleGroupODEProcess
 
         Args:
@@ -75,6 +76,7 @@ class SingleGroupODEProcess:
         self.gamma1 = np.random.uniform(*gamma1)
         self.gamma2 = np.random.uniform(*gamma2)
         self.N = df[self.col_pop].values[0]
+        self.reff_init = reff_init
 
         assert len(day_shift) == 2 and \
             day_shift[0] <= day_shift[1]
@@ -233,8 +235,9 @@ class SingleGroupODEProcess:
         # fit I1
         self.step_ode_sys.update_given_params(c=self.gamma1)
         # modify initial condition of I1
+        avg_gamma = 1.0/(1.0/self.gamma1 + 1.0/self.gamma2)
         self.init_cond.update({
-            'I1': (self.rhs_newE[0]/5.0)**(1.0/self.alpha)
+            'I1': self.alpha*self.rhs_newE[0]/(avg_gamma*self.reff_init)
         })
         I1 = self.step_ode_sys.simulate(self.t_params,
                                         np.array([self.init_cond['I1']]),
@@ -345,6 +348,7 @@ class ODEProcessInput:
     solver_dt: float
     spline_options: Dict
     day_shift: Tuple
+    reff_init: float = 20.0
 
 
 class ODEProcess:
@@ -375,6 +379,7 @@ class ODEProcess:
         self.sigma = np.random.uniform(*input.sigma)
         self.gamma1 = np.random.uniform(*input.gamma1)
         self.gamma2 = np.random.uniform(*input.gamma2)
+        self.reff_init = input.reff_init
         self.day_shift = int(np.random.uniform(*input.day_shift))
 
         # lag days
@@ -407,7 +412,8 @@ class ODEProcess:
                     solver_class=RK4,
                     solver_dt=self.solver_dt,
                     spline_options=self.spline_options,
-                    today=self.today_dict[loc_id]
+                    today=self.today_dict[loc_id],
+                    reff_init=self.reff_init
                 )
             except AssertionError:
                 errors.append(loc_id)
