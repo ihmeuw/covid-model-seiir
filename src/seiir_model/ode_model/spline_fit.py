@@ -91,7 +91,7 @@ class SplineFit:
         self.spline = time.create_spline(data)
         self.spline_coef = None
         self.max_iter = max_iter
-
+    
     def fit_spline(self):
         """Fit the spline.
         """
@@ -111,6 +111,6 @@ class SplineFit:
             return y
         elif self.space == 'ln cumul':
             y = np.exp(y)
-            return np.insert(np.diff(y), 0, y[0])
+            return np.insert(np.diff(y) / np.diff(t), 0, y[0])
         elif self.space == 'cumul':
-            return np.insert(np.diff(y), 0, y[0])
+            return np.insert(np.diff(y) / np.diff(t), 0, y[0])

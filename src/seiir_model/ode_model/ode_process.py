@@ -230,7 +230,6 @@ class SingleGroupODEProcess:
         # fit the spline and predict the right-hand-side
         if fit_spline:
             self.fit_spline()
-
         # fit the E
         self.step_ode_sys.update_given_params(c=self.sigma)
         E = self.step_ode_sys.simulate(self.t_params,
