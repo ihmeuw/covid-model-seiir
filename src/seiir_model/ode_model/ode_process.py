@@ -30,7 +30,7 @@ class SingleGroupODEProcess:
                  solver_class=RK4,
                  solver_dt=1e-1,
                  spline_options=None,
-                 spline_se_space='linear'):
+                 spline_se_power=1.0):
         """Constructor of the SingleGroupODEProcess
 
         Args:
@@ -49,8 +49,7 @@ class SingleGroupODEProcess:
             solver_dt (float, optional): Step size for the ODE system.
             spline_options (dict | None, optional):
                 Dictionary of spline prior options.
-            splinne_se_space(str):
-                The standard error space for the spline fit.
+            splinne_se_power(float): The standard error scaling power.
         """
         # observations
         assert col_date in df
@@ -149,7 +148,7 @@ class SingleGroupODEProcess:
             'spline_degree': 3,
             'prior_spline_convexity': 'concave',
         }
-        self.spline_se_space = spline_se_space
+        self.spline_se_power = spline_se_power
         if spline_options is not None:
             self.spline_options.update(**spline_options)
         self.create_spline()
@@ -161,7 +160,7 @@ class SingleGroupODEProcess:
             self.t[self.obs > 0.0],
             np.log(self.obs[self.obs > 0.0]),
             self.spline_options,
-            se_space=self.spline_se_space
+            se_power=self.spline_se_power
         )
 
     def create_ode_sys(self):
@@ -350,7 +349,7 @@ class ODEProcessInput:
     solver_dt: float
     spline_options: Dict
     day_shift: Tuple
-    spline_se_space: str = 'linear'
+    spline_se_power: float = 1.0
 
 
 class ODEProcess:
@@ -372,7 +371,7 @@ class ODEProcess:
 
         self.solver_dt = input.solver_dt
         self.spline_options = input.spline_options
-        self.spline_se_space = input.spline_se_space
+        self.spline_se_power = input.spline_se_power
 
         # create the location id
         self.loc_ids = np.sort(list(self.df_dict.keys()))
@@ -415,7 +414,7 @@ class ODEProcess:
                     solver_dt=self.solver_dt,
                     spline_options=self.spline_options,
                     today=self.today_dict[loc_id],
-                    spline_se_space=self.spline_se_space
+                    spline_se_power=self.spline_se_power
                 )
             except AssertionError:
                 errors.append(loc_id)
