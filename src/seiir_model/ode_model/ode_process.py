@@ -14,14 +14,13 @@ from odeopt.core.utils import linear_interpolate
 from .spline_fit import SplineFit
 
 
-
-
 class SingleGroupODEProcess:
     def __init__(self, df,
                  col_date,
                  col_cases,
                  col_pop,
                  col_loc_id,
+                 today=np.datetime64(datetime.today()),
                  day_shift=(8,)*2,
                  lag_days=17,
                  alpha=(0.95,)*2,
@@ -30,7 +29,8 @@ class SingleGroupODEProcess:
                  gamma2=(0.5,)*2,
                  solver_class=RK4,
                  solver_dt=1e-1,
-                 spline_options=None):
+                 spline_options=None,
+                 spline_se_power=1.0):
         """Constructor of the SingleGroupODEProcess
 
         Args:
@@ -39,7 +39,7 @@ class SingleGroupODEProcess:
             col_cases (str): Column with new infectious data.
             col_pop (str): Column with population.
             col_loc_id (str): Column with location id.
-            peak_date (str | None): Column with the peaked date.
+            today (np.datetime64): Indicating when "today" is. Defaults to the actual today.
             day_shift (arraylike): Days shift for the data sub-selection.
             alpha (arraylike): bounds for uniformly sampling alpha.
             sigma (arraylike): bounds for uniformly sampling sigma.
@@ -49,6 +49,7 @@ class SingleGroupODEProcess:
             solver_dt (float, optional): Step size for the ODE system.
             spline_options (dict | None, optional):
                 Dictionary of spline prior options.
+            splinne_se_power(float): The standard error scaling power.
         """
         # observations
         assert col_date in df
@@ -81,11 +82,11 @@ class SingleGroupODEProcess:
             day_shift[0] <= day_shift[1]
 
         # subset the data
+        self.today = today
         self.day_shift = int(np.random.uniform(*day_shift))
         self.lag_days = lag_days
         df.sort_values(self.col_date, inplace=True)
         date = pd.to_datetime(df[col_date])
-        self.today = np.datetime64(datetime.today())
         end_date = self.today + np.timedelta64(self.day_shift -
                                                self.lag_days, 'D')
         idx = date < end_date
@@ -147,6 +148,7 @@ class SingleGroupODEProcess:
             'spline_degree': 3,
             'prior_spline_convexity': 'concave',
         }
+        self.spline_se_power = spline_se_power
         if spline_options is not None:
             self.spline_options.update(**spline_options)
         self.create_spline()
@@ -157,7 +159,8 @@ class SingleGroupODEProcess:
         self.step_spline_model = SplineFit(
             self.t[self.obs > 0.0],
             np.log(self.obs[self.obs > 0.0]),
-            self.spline_options
+            self.spline_options,
+            se_power=self.spline_se_power
         )
 
     def create_ode_sys(self):
@@ -337,6 +340,7 @@ class ODEProcessInput:
     col_pop: str
     col_loc_id: str
     col_lag_days: str
+    col_observed: str
 
     alpha: Tuple
     sigma: Tuple
@@ -345,6 +349,7 @@ class ODEProcessInput:
     solver_dt: float
     spline_options: Dict
     day_shift: Tuple
+    spline_se_power: float = 1.0
 
 
 class ODEProcess:
@@ -362,9 +367,11 @@ class ODEProcess:
         self.col_pop = input.col_pop
         self.col_loc_id = input.col_loc_id
         self.col_lag_days = input.col_lag_days
+        self.col_observed = input.col_observed
 
         self.solver_dt = input.solver_dt
         self.spline_options = input.spline_options
+        self.spline_se_power = input.spline_se_power
 
         # create the location id
         self.loc_ids = np.sort(list(self.df_dict.keys()))
@@ -379,6 +386,12 @@ class ODEProcess:
         # lag days
         self.lag_days = self.df_dict[self.loc_ids[0]][
             self.col_lag_days].values[0]
+        self.today_dict = {
+            loc_id: np.datetime64(
+                self.df_dict[loc_id].loc[self.df_dict[loc_id][self.col_observed] == 1, self.col_date].max()
+            )
+            for loc_id in self.loc_ids
+        }
 
         # create model for each location
         self.models = {}
@@ -399,7 +412,9 @@ class ODEProcess:
                     gamma2=(self.gamma2,)*2,
                     solver_class=RK4,
                     solver_dt=self.solver_dt,
-                    spline_options=self.spline_options
+                    spline_options=self.spline_options,
+                    today=self.today_dict[loc_id],
+                    spline_se_power=self.spline_se_power
                 )
             except AssertionError:
                 errors.append(loc_id)
