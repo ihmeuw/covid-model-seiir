@@ -1,7 +1,8 @@
 COVID-19 SEIIR Model
 ====================
 
-[![Build Status](https://travis-ci.com/ihmeuw/covid-model-seiir.svg?branch=master)](https://travis-ci.com/ihmeuw/covid-model-seiir)
+.. image:: https://travis-ci.com/ihmeuw/covid-model-seiir.svg?branch=master
+    :target: https://travis-ci.com/ihmeuw/covid-model-seiir
 
 
 .. note::
