@@ -117,6 +117,10 @@ class SingleGroupODEProcess:
         self.df = df[idx_final].copy()
         date = date[idx_final]
 
+        # save start and end date
+        self.start_date = pd.to_datetime(start_date).strftime('%Y-%m-%d')
+        self.end_date = pd.to_datetime(end_date).strftime('%Y-%m-%d')
+
         # compute days
         self.col_days = 'days'
         self.df[self.col_days] = (date - date.min()).dt.days.values
@@ -313,8 +317,8 @@ class SingleGroupODEProcess:
         """
         params, components = self.predict(self.t)
         df_result = pd.DataFrame({
-            'loc_id': self.loc_id,
-            'date': self.date,
+            self.col_loc_id: self.loc_id,
+            self.col_date: self.date,
             'days': self.t,
             'beta': params[0]
         })
@@ -333,6 +337,14 @@ class SingleGroupODEProcess:
                                  columns=['params'])
 
         return df_params
+
+    def create_start_end_date_df(self):
+        df_result = pd.DataFrame({
+            self.col_loc_id: self.loc_id,
+            'start_date': self.start_date,
+            'end_date': self.end_date
+        }, index=[0])
+        return df_result
 
 
 @dataclass
@@ -454,3 +466,12 @@ class ODEProcess:
         })
 
         return df_params
+
+    def create_start_end_date_df(self):
+        """
+        Create starting and ending date data frames for data used to fit, by group.
+        """
+        return pd.concat([
+            model.create_start_end_date_df()
+            for loc_id, model in self.models.items()
+        ]).reset_index(drop=True)
