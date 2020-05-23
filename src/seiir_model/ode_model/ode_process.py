@@ -116,8 +116,8 @@ class SingleGroupODEProcess:
         date = date[idx_final]
 
         # save start and end date
-        self.start_date = start_date
-        self.end_date = end_date
+        self.start_date = pd.to_datetime(start_date).strftime('%Y-%m-%d')
+        self.end_date = pd.to_datetime(end_date).strftime('%Y-%m-%d')
 
         # compute days
         self.col_days = 'days'
