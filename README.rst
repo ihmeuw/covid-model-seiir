@@ -4,7 +4,6 @@ COVID-19 SEIIR Model
 .. image:: https://travis-ci.com/ihmeuw/covid-model-seiir.svg?branch=master
     :target: https://travis-ci.com/ihmeuw/covid-model-seiir
 
-
 .. note::
 
    This package has not yet been configured for use outside the IHME
