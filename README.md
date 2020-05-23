@@ -1,1 +1,1 @@
-# COVID ODE OPT Production Repo
+# COVID-19 SEIIR Model
