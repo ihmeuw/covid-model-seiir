@@ -30,7 +30,8 @@ class SingleGroupODEProcess:
                  solver_class=RK4,
                  solver_dt=1e-1,
                  spline_options=None,
-                 spline_se_power=1.0):
+                 spline_se_power=1.0,
+                 spline_space='ln daily'):
         """Constructor of the SingleGroupODEProcess
 
         Args:
@@ -49,7 +50,8 @@ class SingleGroupODEProcess:
             solver_dt (float, optional): Step size for the ODE system.
             spline_options (dict | None, optional):
                 Dictionary of spline prior options.
-            splinne_se_power(float): The standard error scaling power.
+            spline_se_power(float): The standard error scaling power.
+            spline_space (str): which space to fit the spline.
         """
         # observations
         assert col_date in df
@@ -149,6 +151,7 @@ class SingleGroupODEProcess:
             'prior_spline_convexity': 'concave',
         }
         self.spline_se_power = spline_se_power
+        self.spline_space = spline_space
         if spline_options is not None:
             self.spline_options.update(**spline_options)
         self.create_spline()
@@ -157,10 +160,11 @@ class SingleGroupODEProcess:
         """Create spline fit object.
         """
         self.step_spline_model = SplineFit(
-            self.t[self.obs > 0.0],
-            np.log(self.obs[self.obs > 0.0]),
+            self.t,
+            self.obs,
             self.spline_options,
-            se_power=self.spline_se_power
+            se_power=self.spline_se_power,
+            space=self.spline_space
         )
 
     def create_ode_sys(self):
@@ -216,7 +220,7 @@ class SingleGroupODEProcess:
         """Fit spline.
         """
         self.step_spline_model.fit_spline()
-        rhs_newE = np.exp(self.step_spline_model.predict(self.t_params))
+        rhs_newE = self.step_spline_model.predict(self.t_params)
         rhs_newE[self.t_params > self.step_spline_model.spline.knots[-1]] = 0.0
         self.rhs_newE = rhs_newE
 
@@ -226,7 +230,6 @@ class SingleGroupODEProcess:
         # fit the spline and predict the right-hand-side
         if fit_spline:
             self.fit_spline()
-
         # fit the E
         self.step_ode_sys.update_given_params(c=self.sigma)
         E = self.step_ode_sys.simulate(self.t_params,
@@ -350,6 +353,7 @@ class ODEProcessInput:
     spline_options: Dict
     day_shift: Tuple
     spline_se_power: float = 1.0
+    spline_space: str = 'ln daily'
 
 
 class ODEProcess:
@@ -372,6 +376,7 @@ class ODEProcess:
         self.solver_dt = input.solver_dt
         self.spline_options = input.spline_options
         self.spline_se_power = input.spline_se_power
+        self.spline_space = input.spline_space
 
         # create the location id
         self.loc_ids = np.sort(list(self.df_dict.keys()))
@@ -414,7 +419,8 @@ class ODEProcess:
                     solver_dt=self.solver_dt,
                     spline_options=self.spline_options,
                     today=self.today_dict[loc_id],
-                    spline_se_power=self.spline_se_power
+                    spline_se_power=self.spline_se_power,
+                    spline_space=self.spline_space
                 )
             except AssertionError:
                 errors.append(loc_id)
