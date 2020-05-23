@@ -443,8 +443,8 @@ class ODEProcess:
         """Create parameter DataFrame.
         """
         df_params = pd.DataFrame({
-            'params': ['alpha', 'sigma', 'gamma1', 'gamma2'],
-            'values': [self.alpha, self.sigma, self.gamma1, self.gamma2]
+            'params': ['alpha', 'sigma', 'gamma1', 'gamma2', 'day_shift'],
+            'values': [self.alpha, self.sigma, self.gamma1, self.gamma2, self.day_shift]
         })
 
         return df_params
