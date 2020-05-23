@@ -9,7 +9,7 @@ import matplotlib.dates as mdates
 import matplotlib.patheffects as pe
 
 # TODO: This is my local copy of Directories
-# from seiir_model.visualizer.versioner import Directories
+# from covid_model_seiir.visualizer.versioner import Directories
 # TODO: Comment above and uncomment these  on cluster
 from seiir_model_pipeline.core.versioner import Directories
 from seiir_model_pipeline.core.versioner import load_regression_settings, load_forecast_settings

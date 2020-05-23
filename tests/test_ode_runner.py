@@ -1,6 +1,6 @@
 import numpy as np
 
-from seiir_model.ode_forecasting import ODERunner, SiierdModelSpecs
+from covid_model_seiir.ode_forecasting import ODERunner, SiierdModelSpecs
 
 
 def test_ode_runner():
