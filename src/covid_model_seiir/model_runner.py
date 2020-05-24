@@ -1,10 +1,10 @@
 import pandas as pd
 import numpy as np
 from slime.model.cov_model import CovModelSet, CovModel
-from seiir_model.ode_model import ODEProcess
-from seiir_model.regression_model.beta_fit import BetaRegressor, BetaRegressorSequential, predict
-from seiir_model.regression_model.utils import convolve_mean
-from seiir_model.ode_forecasting import ODERunner
+from covid_model_seiir.ode_model import ODEProcess
+from covid_model_seiir.regression_model.beta_fit import BetaRegressor, BetaRegressorSequential, predict
+from covid_model_seiir.regression_model.utils import convolve_mean
+from covid_model_seiir.ode_forecasting import ODERunner
 
 COL_TEMP = 'temperature'
 COL_TESTING = 'testing_reference'
@@ -78,9 +78,9 @@ class ModelRunner:
 
     def fit_beta_regression_prod(self, ordered_covmodel_sets, mr_data, path, df_cov_coef=None, std=1.0, add_intercept=True):
         covmodels = []
-        if add_intercept: 
+        if add_intercept:
             covmodels.append(CovModel(col_cov='intercept', use_re=True, re_var=np.inf))
-        
+
         for covmodel_set in ordered_covmodel_sets:
             covmodels.extend(covmodel_set.cov_models)
         covmodels_set_comb = CovModelSet(covmodels)
@@ -92,7 +92,7 @@ class ModelRunner:
             for i, covmodel in enumerate(covmodels_set_comb.cov_models):
                 if not covmodel.use_re:
                     covmodel.gprior[0] = np.mean(coef_values[:, i])
-        
+
         regressor.fit(mr_data)
         print(regressor.cov_coef)
         regressor.save_coef(path)
@@ -112,7 +112,7 @@ class ModelRunner:
 
         Arguments:
             model_specs (SiierdModelSpecs): specification for the model. See
-                seiir_model.ode_forecasting.SiierdModelSpecs
+                covid_model_seiir.ode_forecasting.SiierdModelSpecs
                 for more details.
                 example:
                     model_specs = SiierdModelSpecs(
