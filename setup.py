@@ -19,7 +19,6 @@ if __name__ == "__main__":
         'numpy',
         'odeopt',
         'pandas',
-        'slime',
     ]
 
     test_requirements = [
