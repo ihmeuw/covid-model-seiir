@@ -96,7 +96,7 @@ class SingleGroupODEProcess:
         cases_threshold = 50.0
         start_date = date[df[col_cases] >= cases_threshold].min()
         idx_final = idx & (date >= start_date)
-        while not any(idx_final):
+        while not np.sum(idx_final) > 2:
             cases_threshold *= 0.5
             print(f'reduce cases threshold for {self.loc_id} to'
                   f'{cases_threshold}')
@@ -104,7 +104,7 @@ class SingleGroupODEProcess:
             idx_final = idx & (date >= start_date)
             if cases_threshold < 1e-6:
                 break
-        if np.sum(idx_final) < 2:
+        if np.sum(idx_final) <= 2:
             cases_threshold = 0.0
             start_date = date[df[col_cases] > cases_threshold].min()
             idx_final = idx & (date > start_date)
