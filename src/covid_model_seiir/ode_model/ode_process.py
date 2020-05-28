@@ -104,10 +104,6 @@ class SingleGroupODEProcess:
             idx_final = idx & (date >= start_date)
             if cases_threshold < 1e-6:
                 break
-        if np.sum(idx_final) <= 2:
-            cases_threshold = 0.0
-            start_date = date[df[col_cases] > cases_threshold].min()
-            idx_final = idx & (date > start_date)
 
         assert np.sum(idx_final) > 2, \
             f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a ' \
