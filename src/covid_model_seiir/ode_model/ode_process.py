@@ -29,7 +29,9 @@ class SingleGroupODEProcess:
                  gamma2=(0.5,)*2,
                  solver_class=RK4,
                  solver_dt=1e-1,
-                 spline_options=None):
+                 spline_options=None,
+                 spline_se_power=1.0,
+                 spline_space='ln daily'):
         """Constructor of the SingleGroupODEProcess
 
         Args:
@@ -48,6 +50,8 @@ class SingleGroupODEProcess:
             solver_dt (float, optional): Step size for the ODE system.
             spline_options (dict | None, optional):
                 Dictionary of spline prior options.
+            spline_se_power(float): The standard error scaling power.
+            spline_space (str): which space to fit the spline.
         """
         # observations
         assert col_date in df
@@ -87,12 +91,12 @@ class SingleGroupODEProcess:
         date = pd.to_datetime(df[col_date])
         end_date = self.today + np.timedelta64(self.day_shift -
                                                self.lag_days, 'D')
-        idx = date < end_date
+        idx = date <= end_date
 
         cases_threshold = 50.0
         start_date = date[df[col_cases] >= cases_threshold].min()
         idx_final = idx & (date >= start_date)
-        while not any(idx_final):
+        while not np.sum(idx_final) > 2:
             cases_threshold *= 0.5
             print(f'reduce cases threshold for {self.loc_id} to'
                   f'{cases_threshold}')
@@ -100,10 +104,6 @@ class SingleGroupODEProcess:
             idx_final = idx & (date >= start_date)
             if cases_threshold < 1e-6:
                 break
-        if np.sum(idx_final) < 2:
-            cases_threshold = 0.0
-            start_date = date[df[col_cases] > cases_threshold].min()
-            idx_final = idx & (date > start_date)
 
         assert np.sum(idx_final) > 2, \
             f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a ' \
@@ -112,6 +112,10 @@ class SingleGroupODEProcess:
 
         self.df = df[idx_final].copy()
         date = date[idx_final]
+
+        # save start and end date
+        self.start_date = pd.to_datetime(start_date).strftime('%Y-%m-%d')
+        self.end_date = pd.to_datetime(end_date).strftime('%Y-%m-%d')
 
         # compute days
         self.col_days = 'days'
@@ -146,6 +150,8 @@ class SingleGroupODEProcess:
             'spline_degree': 3,
             'prior_spline_convexity': 'concave',
         }
+        self.spline_se_power = spline_se_power
+        self.spline_space = spline_space
         if spline_options is not None:
             self.spline_options.update(**spline_options)
         self.create_spline()
@@ -154,9 +160,11 @@ class SingleGroupODEProcess:
         """Create spline fit object.
         """
         self.step_spline_model = SplineFit(
-            self.t[self.obs > 0.0],
-            np.log(self.obs[self.obs > 0.0]),
-            self.spline_options
+            self.t,
+            self.obs,
+            self.spline_options,
+            se_power=self.spline_se_power,
+            space=self.spline_space
         )
 
     def create_ode_sys(self):
@@ -212,7 +220,7 @@ class SingleGroupODEProcess:
         """Fit spline.
         """
         self.step_spline_model.fit_spline()
-        rhs_newE = np.exp(self.step_spline_model.predict(self.t_params))
+        rhs_newE = self.step_spline_model.predict(self.t_params)
         rhs_newE[self.t_params > self.step_spline_model.spline.knots[-1]] = 0.0
         self.rhs_newE = rhs_newE
 
@@ -222,7 +230,6 @@ class SingleGroupODEProcess:
         # fit the spline and predict the right-hand-side
         if fit_spline:
             self.fit_spline()
-
         # fit the E
         self.step_ode_sys.update_given_params(c=self.sigma)
         E = self.step_ode_sys.simulate(self.t_params,
@@ -306,8 +313,8 @@ class SingleGroupODEProcess:
         """
         params, components = self.predict(self.t)
         df_result = pd.DataFrame({
-            'loc_id': self.loc_id,
-            'date': self.date,
+            self.col_loc_id: self.loc_id,
+            self.col_date: self.date,
             'days': self.t,
             'beta': params[0]
         })
@@ -327,6 +334,14 @@ class SingleGroupODEProcess:
 
         return df_params
 
+    def create_start_end_date_df(self):
+        df_result = pd.DataFrame({
+            self.col_loc_id: self.loc_id,
+            'start_date': self.start_date,
+            'end_date': self.end_date
+        }, index=[0])
+        return df_result
+
 
 @dataclass
 class ODEProcessInput:
@@ -345,6 +360,8 @@ class ODEProcessInput:
     solver_dt: float
     spline_options: Dict
     day_shift: Tuple
+    spline_se_power: float = 1.0
+    spline_space: str = 'ln daily'
 
 
 class ODEProcess:
@@ -366,6 +383,8 @@ class ODEProcess:
 
         self.solver_dt = input.solver_dt
         self.spline_options = input.spline_options
+        self.spline_se_power = input.spline_se_power
+        self.spline_space = input.spline_space
 
         # create the location id
         self.loc_ids = np.sort(list(self.df_dict.keys()))
@@ -407,7 +426,9 @@ class ODEProcess:
                     solver_class=RK4,
                     solver_dt=self.solver_dt,
                     spline_options=self.spline_options,
-                    today=self.today_dict[loc_id]
+                    today=self.today_dict[loc_id],
+                    spline_se_power=self.spline_se_power,
+                    spline_space=self.spline_space
                 )
             except AssertionError:
                 errors.append(loc_id)
@@ -436,8 +457,17 @@ class ODEProcess:
         """Create parameter DataFrame.
         """
         df_params = pd.DataFrame({
-            'params': ['alpha', 'sigma', 'gamma1', 'gamma2'],
-            'values': [self.alpha, self.sigma, self.gamma1, self.gamma2]
+            'params': ['alpha', 'sigma', 'gamma1', 'gamma2', 'day_shift'],
+            'values': [self.alpha, self.sigma, self.gamma1, self.gamma2, self.day_shift]
         })
 
         return df_params
+
+    def create_start_end_date_df(self):
+        """
+        Create starting and ending date data frames for data used to fit, by group.
+        """
+        return pd.concat([
+            model.create_start_end_date_df()
+            for loc_id, model in self.models.items()
+        ]).reset_index(drop=True)

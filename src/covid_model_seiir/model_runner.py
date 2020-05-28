@@ -36,6 +36,14 @@ class ModelRunner:
         else:
             return self.ode_model.create_params_df()
 
+    def get_beta_start_end_dates(self, path=None):
+        if self.ode_model is None:
+            assert path is not None, 'Must fit_beta_ode or provide the path ' \
+                                     'to the dates.'
+            return pd.read_csv(path)
+        else:
+            return self.ode_model.create_start_end_date_df()
+
     def save_beta_ode_result(self, fit_file, params_file):
         """Save result from beta ode fit.
 

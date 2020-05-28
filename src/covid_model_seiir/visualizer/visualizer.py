@@ -346,16 +346,25 @@ class PlotBetaCoef:
             coef_mean = self.coef_data[cov][1].mean()
             plt.vlines(coef_mean, ymin=1, ymax=self.num_locs,
                        linewidth=1.0, linestyle='--', color='#003152')
-            #             for b in self.settings['covariates'][cov]['bounds']:
-            #                 if np.abs(b) >= np.abs(coef_mean)*2:
-            #                     continue
-            #                 plt.vlines(b, ymin=1, ymax=self.num_locs,
-            #                            linewidth=1.0, linestyle='-', color='#8B0000')
             plt.grid(b=True)
             plt.box(on=None)
             plt.title(cov)
             plt.savefig(self.path_to_savefig / f'{cov}_boxplot.pdf',
                         bbox_inches='tight')
+
+        # save the coefficient of stats
+        for cov in self.covs:
+            lower = np.quantile(self.coef_data[cov][1], 0.025, axis=0)
+            upper = np.quantile(self.coef_data[cov][1], 0.975, axis=0)
+            mean = np.mean(self.coef_data[cov][1], axis=0)
+            df = pd.DataFrame({
+                'loc': self.locs,
+                'loc_id': self.loc_ids,
+                'lower': lower,
+                'mean': mean,
+                'upper': upper,
+            })
+            df.to_csv(self.path_to_savefig / f'{cov}_coef.csv', index=False)
 
 
 class PlotBetaResidual:
