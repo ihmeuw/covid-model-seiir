@@ -16,7 +16,6 @@ class BetaRegressor:
         self.covmodel_set_fixed = copy.deepcopy(self.covmodel_set)
         for covmodel in self.covmodel_set_fixed.cov_models:
             covmodel.use_re = False 
-            covmodel.gprior = None
 
         self.mr_model_fixed = MRModel(mr_data, self.covmodel_set_fixed)
         self.mr_model_fixed.fit_model()
@@ -72,38 +71,34 @@ class BetaRegressorSequential:
         for covmodel_set in self.ordered_covmodel_sets:
             self.col_covs.extend([covmodel.col_cov for covmodel in covmodel_set.cov_models])
     
-    def fit(self, mr_data, verbose=False, add_intercept=True):
-        if add_intercept:
-            covmodels = [CovModel(col_cov='intercept', use_re=True, re_var=np.inf)]
-            self.col_covs.insert(0, 'intercept')
-            input_bounds = {'intercept': None}
-        else:
-            covmodels = []
-            input_bounds = {}
+    def fit(self, mr_data, verbose=False):
+        covmodels = []
         
-        while len(self.ordered_covmodel_sets) > 0:
+        while len(self.ordered_covmodel_sets) > 1:
             new_cov_models = self.ordered_covmodel_sets.pop(0).cov_models
             covmodel_set = CovModelSet(covmodels + new_cov_models)
             
             regressor = BetaRegressor(covmodel_set)
-            regressor.fit_no_random(mr_data, verbose=verbose)
             if verbose:
-                print(regressor.cov_coef_fixed)
+                print('=' * 20)
+                for covmodel in regressor.covmodel_set.cov_models:
+                    print(covmodel.col_cov, 'gprior:', covmodel.gprior, 'bounds:', covmodel.bounds)
+            
+            regressor.fit_no_random(mr_data, verbose=verbose)
 
             for covmodel, coef in zip(covmodel_set.cov_models[len(covmodels):], regressor.cov_coef_fixed[len(covmodels):]):
-                input_bounds[covmodel.col_cov] = covmodel.bounds
-                covmodel.bounds = np.array([coef, coef])
                 if covmodel.gprior is not None:
                     covmodel.gprior[0] = coef 
                 else:
                     covmodel.gprior = [coef, self.default_std]
             covmodels = covmodel_set.cov_models
-        
-        for covmodel in covmodels:
-            if covmodel.use_re:
-                covmodel.bounds = input_bounds[covmodel.col_cov]
 
+        covmodels.extend(self.ordered_covmodel_sets.pop(0).cov_models)
         self.regressor = BetaRegressor(CovModelSet(covmodels))
+        if verbose:
+            print('=' * 20)
+            for covmodel in self.regressor.covmodel_set.cov_models:
+                print(covmodel.col_cov, 'gprior:', covmodel.gprior, 'bounds:', covmodel.bounds)
         self.regressor.fit(mr_data, verbose)
         self.cov_coef = self.regressor.cov_coef
 
