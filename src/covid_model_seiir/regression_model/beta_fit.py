@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import copy
+from pprint import pprint
 
 from slime.core import MRData
 from slime.model import CovModelSet, MRModel, CovModel
@@ -15,7 +16,7 @@ class BetaRegressor:
     def fit_no_random(self, mr_data, verbose=True):
         self.covmodel_set_fixed = copy.deepcopy(self.covmodel_set)
         for covmodel in self.covmodel_set_fixed.cov_models:
-            covmodel.use_re = False 
+            covmodel.use_re = False
 
         self.mr_model_fixed = MRModel(mr_data, self.covmodel_set_fixed)
         self.mr_model_fixed.fit_model()
@@ -29,12 +30,12 @@ class BetaRegressor:
             print('by hand', coef)
             print('from slime', self.cov_coef_fixed)
 
-    def fit(self, mr_data, verbose=False):        
-        self.mr_model = MRModel(mr_data, self.covmodel_set) 
+    def fit(self, mr_data, verbose=False):
+        self.mr_model = MRModel(mr_data, self.covmodel_set)
         self.mr_model.fit_model()
         self.cov_coef = self.mr_model.result
         if verbose:
-            print(self.cov_coef)
+            pprint(self.cov_coef)
             print()
 
     def save_coef(self, path):
@@ -52,12 +53,12 @@ class BetaRegressor:
         self.cov_coef = {}
         for k, v in cov_coef_dict.items():
             coef = [v[cov] for cov in self.col_covs]
-            self.cov_coef[k] = coef 
+            self.cov_coef[k] = coef
 
     def predict(self, cov, group):
         if group in self.cov_coef:
             assert cov.shape[1] == len(self.cov_coef[group])
-            return np.sum([self.cov_coef[group][i] * cov[:, i] for i in range(cov.shape[1])], axis=0)
+            return np.sum([self.cov_coef[group][i]*cov[:, i] for i in range(cov.shape[1])], axis=0)
         else:
             raise RuntimeError('Group Not Found.')
 
@@ -65,40 +66,45 @@ class BetaRegressor:
 class BetaRegressorSequential:
 
     def __init__(self, ordered_covmodel_sets, default_std=1.0):
-        self.default_std = default_std        
+        self.default_std = default_std
         self.ordered_covmodel_sets = copy.deepcopy(ordered_covmodel_sets)
         self.col_covs = []
         for covmodel_set in self.ordered_covmodel_sets:
             self.col_covs.extend([covmodel.col_cov for covmodel in covmodel_set.cov_models])
-    
+
     def fit(self, mr_data, verbose=False):
         covmodels = []
-        
-        while len(self.ordered_covmodel_sets) > 1:
+        covmodel_bounds = []
+        while len(self.ordered_covmodel_sets) > 0:
             new_cov_models = self.ordered_covmodel_sets.pop(0).cov_models
             covmodel_set = CovModelSet(covmodels + new_cov_models)
-            
+            for cov_model in new_cov_models:
+                covmodel_bounds.append(cov_model.bounds)
             regressor = BetaRegressor(covmodel_set)
             if verbose:
-                print('=' * 20)
+                print('='*20)
                 for covmodel in regressor.covmodel_set.cov_models:
-                    print(covmodel.col_cov, 'gprior:', covmodel.gprior, 'bounds:', covmodel.bounds)
-            
+                    print(covmodel.col_cov,
+                          'gprior:', covmodel.gprior,
+                          'bounds:', covmodel.bounds)
+
             regressor.fit_no_random(mr_data, verbose=verbose)
 
-            for covmodel, coef in zip(covmodel_set.cov_models[len(covmodels):], regressor.cov_coef_fixed[len(covmodels):]):
-                if covmodel.gprior is not None:
-                    covmodel.gprior[0] = coef 
-                else:
-                    covmodel.gprior = [coef, self.default_std]
+            for covmodel, coef in zip(covmodel_set.cov_models[len(covmodels):],
+                                      regressor.cov_coef_fixed[len(covmodels):]):
+                covmodel.gprior[0] = coef
+                covmodel.bounds = np.array([coef, coef])
             covmodels = covmodel_set.cov_models
 
-        covmodels.extend(self.ordered_covmodel_sets.pop(0).cov_models)
+        for i, cov_model in enumerate(covmodels):
+            cov_model.bounds = np.array(covmodel_bounds[i])
         self.regressor = BetaRegressor(CovModelSet(covmodels))
         if verbose:
-            print('=' * 20)
+            print('='*20)
             for covmodel in self.regressor.covmodel_set.cov_models:
-                print(covmodel.col_cov, 'gprior:', covmodel.gprior, 'bounds:', covmodel.bounds)
+                print(covmodel.col_cov,
+                      'gprior:', covmodel.gprior,
+                      'bounds:', covmodel.bounds)
         self.regressor.fit(mr_data, verbose)
         self.cov_coef = self.regressor.cov_coef
 
@@ -119,7 +125,7 @@ def predict(regressor, df_cov, col_t, col_group, col_beta='beta_pred'):
     col_covs = regressor.col_covs
 
     beta_pred = []
-    
+
     for group in groups:
         df_one_group = df[df[col_group] == group]
         if group in regressor.cov_coef:
@@ -127,15 +133,9 @@ def predict(regressor, df_cov, col_t, col_group, col_beta='beta_pred'):
             betas = regressor.predict(cov, group)
             beta_pred.append(betas)
         else:
-            beta_pred.append([np.nan] * df_one_group.shape[0])
-    
+            beta_pred.append([np.nan]*df_one_group.shape[0])
+
     beta_pred = np.concatenate(beta_pred)
     df[col_beta] = beta_pred
 
     return df
-
-        
-        
-
-        
-
