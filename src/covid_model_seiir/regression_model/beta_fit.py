@@ -75,11 +75,14 @@ class BetaRegressorSequential:
     def fit(self, mr_data, verbose=False):
         covmodels = []
         covmodel_bounds = []
+        covmodel_gprior_std = []
         while len(self.ordered_covmodel_sets) > 0:
             new_cov_models = self.ordered_covmodel_sets.pop(0).cov_models
             covmodel_set = CovModelSet(covmodels + new_cov_models)
             for cov_model in new_cov_models:
                 covmodel_bounds.append(cov_model.bounds)
+                covmodel_gprior_std.append(cov_model.gprior[1])
+                cov_model.gprior[1] = np.inf
             regressor = BetaRegressor(covmodel_set)
             if verbose:
                 print('='*20)
@@ -98,6 +101,7 @@ class BetaRegressorSequential:
 
         for i, cov_model in enumerate(covmodels):
             cov_model.bounds = np.array(covmodel_bounds[i])
+            cov_model.gprior[1] = covmodel_gprior_std[i]
         self.regressor = BetaRegressor(CovModelSet(covmodels))
         if verbose:
             print('='*20)
