@@ -106,7 +106,7 @@ class SingleGroupODEProcess:
             if cases_threshold < 1e-6:
                 break
 
-        if np.sum(idx_final) > 2:
+        if np.sum(idx_final) <= 2:
             raise RuntimeError(
                 f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a '
                 f'spline. Number of data between date {start_date} and {end_date}'
