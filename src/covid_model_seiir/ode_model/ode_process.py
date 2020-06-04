@@ -96,7 +96,8 @@ class SingleGroupODEProcess:
         cases_threshold = 50.0
         start_date = date[df[col_cases] >= cases_threshold].min()
         idx_final = idx & (date >= start_date)
-        while not np.sum(idx_final) > 2:
+        infection_end_date = self.today - pd.Timedelta(days=self.lag_days)
+        while np.sum(idx_final) <= 2 or infection_end_date < start_date:
             cases_threshold *= 0.5
             print(f'reduce cases threshold for {self.loc_id} to'
                   f'{cases_threshold}')
@@ -105,10 +106,17 @@ class SingleGroupODEProcess:
             if cases_threshold < 1e-6:
                 break
 
-        assert np.sum(idx_final) > 2, \
-            f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a ' \
-            f'spline. Number of data between date {start_date} and {end_date}' \
-            f' is {np.sum(idx_final)}.'
+        if np.sum(idx_final) > 2:
+            raise RuntimeError(
+                f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a '
+                f'spline. Number of data between date {start_date} and {end_date}'
+                f' is {np.sum(idx_final)}.'
+            )
+        if infection_end_date < start_date:
+            raise RuntimeError(
+                f'loc_id: {self.loc_id}, not enough non-zero cases before the '
+                'infection data end date to model and forecast.'
+            )
 
         self.df = df[idx_final].copy()
         date = date[idx_final]
