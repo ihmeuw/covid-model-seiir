@@ -51,7 +51,7 @@ class CustomizedSEIIR(ODESys):
 
         ds = -new_e
         de = new_e - self.sigma*e
-        di1 = max(self.sigma*e - self.gamma1*i1 - theta, -self.c*i1)
+        di1 = max(self.sigma*e - self.gamma1*i1 + theta, -self.c*i1)
         di2 = self.gamma1*i1 - self.gamma2*i2
         dr = self.gamma2*i2
 
