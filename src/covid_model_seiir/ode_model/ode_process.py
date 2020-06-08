@@ -224,12 +224,14 @@ class SingleGroupODEProcess:
         rhs_newE[self.t_params > self.step_spline_model.spline.knots[-1]] = 0.0
         self.rhs_newE = rhs_newE
 
-    def process(self, fit_spline=True):
+    def process(self, fit_spline=False):
         """Process the data.
         """
         # fit the spline and predict the right-hand-side
         if fit_spline:
             self.fit_spline()
+        else:
+            self.rhs_newE = linear_interpolate(self.t_params, self.t, self.obs)
         # fit the E
         self.step_ode_sys.update_given_params(c=self.sigma)
         E = self.step_ode_sys.simulate(self.t_params,
