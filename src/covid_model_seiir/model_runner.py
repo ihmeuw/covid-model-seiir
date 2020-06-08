@@ -106,7 +106,7 @@ class ModelRunner:
         return df
 
     @staticmethod
-    def forecast(model_specs, init_cond, times, betas,  dt=0.1):
+    def forecast(model_specs, init_cond, times, betas, thetas=None, dt=0.1):
         """
         Solves ode for given time and beta
 
@@ -130,6 +130,9 @@ class ModelRunner:
 
             times (np.array): array with times to predict for
             betas (np.array): array with betas to predict for
+            thetas (np.array): optional array with a term indicating size of SEIIR
+                adjustment by day. If None, defaults to an adjustment of 0. If
+                not None, must have the same dimensions as betas.
             dt (float): Optional, step of the solver. I left it sticking outside
                 in case it works slow, so you can decrease it from the IHME pipeline.
 
@@ -139,4 +142,4 @@ class ModelRunner:
             of the ODE
         """
         forecaster = ODERunner(model_specs, init_cond, dt=dt)
-        return forecaster.get_solution(times, betas)
+        return forecaster.get_solution(times, beta=betas, theta=thetas)
