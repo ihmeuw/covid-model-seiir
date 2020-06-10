@@ -64,7 +64,7 @@ class SiierdModelSpecs:
     gamma1: float
     gamma2: float
     N: float  # in case we want to do fractions, but not number of people
-    c: float = 0.99
+    c: float = 0.1
 
     def __post_init__(self):
         assert 0 < self.alpha <= 1.0
