@@ -7,9 +7,9 @@ import pandas as pd
 from odeopt.ode import RK4
 from odeopt.ode import ODESys
 
+
 class CustomizedSEIIR(ODESys):
-    """Customized SEIIR ODE system.
-    """
+    """Customized SEIIR ODE system."""
 
     def __init__(self,
                  alpha: float,
@@ -17,7 +17,7 @@ class CustomizedSEIIR(ODESys):
                  gamma1: float,
                  gamma2: float,
                  N: Union[int, float],
-                 c: float, *args):
+                 delta: float, *args):
         """Constructor of CustomizedSEIIR.
         """
         self.alpha = alpha
@@ -25,7 +25,7 @@ class CustomizedSEIIR(ODESys):
         self.gamma1 = gamma1
         self.gamma2 = gamma2
         self.N = N
-        self.c = c
+        self.delta = delta
 
         # create parameter names
         params = ['beta', 'theta']
@@ -47,15 +47,22 @@ class CustomizedSEIIR(ODESys):
         i2 = y[3]
         r = y[4]
 
+        theta_plus = max(theta, 0.)
+        theta_minus = min(theta, 0.)
+        theta_tilde = int(theta_plus == theta_minus)
+        theta_minus_alt = (self.gamma1 - self.delta) * i1 - self.sigma * e - theta_plus
+        effective_theta_minus = max(theta_minus, theta_minus_alt) * theta_tilde
+
         new_e = beta*(s/self.N)*(i1 + i2)**self.alpha
 
-        ds = -new_e
+        ds = -new_e - theta_plus
         de = new_e - self.sigma*e
-        di1 = max(self.sigma*e - self.gamma1*i1 + theta, -self.c*i1)
+        di1 = self.sigma*e - self.gamma1*i1 + theta_plus + effective_theta_minus
         di2 = self.gamma1*i1 - self.gamma2*i2
-        dr = self.gamma2*i2
+        dr = self.gamma2*i2 - effective_theta_minus
 
         return np.array([ds, de, di1, di2, dr])
+
 
 @dataclass(frozen=True)
 class SiierdModelSpecs:
@@ -64,7 +71,7 @@ class SiierdModelSpecs:
     gamma1: float
     gamma2: float
     N: float  # in case we want to do fractions, but not number of people
-    c: float = 0.99
+    delta: float = 0.1
 
     def __post_init__(self):
         assert 0 < self.alpha <= 1.0
@@ -72,7 +79,7 @@ class SiierdModelSpecs:
         assert self.gamma1 >= 0
         assert self.gamma2 >= 0
         assert self.N > 0
-        assert self.c > 0.0
+        assert self.delta > 0.0
 
 
 class ODERunner:
