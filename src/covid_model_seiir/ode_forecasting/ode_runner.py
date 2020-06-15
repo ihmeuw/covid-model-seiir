@@ -47,7 +47,7 @@ class CustomizedSEIIR(ODESys):
         i2 = y[3]
         r = y[4]
 
-        theta_plus = max(theta, 0.)
+        theta_plus = max(theta, 0.) * s / 1_000_000
         theta_minus = min(theta, 0.)
         theta_tilde = int(theta_plus != theta_minus)
         theta_minus_alt = (self.gamma1 - self.delta) * i1 - self.sigma * e - theta_plus
