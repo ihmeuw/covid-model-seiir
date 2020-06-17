@@ -129,7 +129,7 @@ class SingleGroupODEProcess:
             solver_dt=self.solver_dt
         )
 
-    def process(self, fit_spline=False):
+    def process(self):
         """Process the data.
         """
         self.rhs_newE = linear_interpolate(self.t_params, self.t, self.obs)
