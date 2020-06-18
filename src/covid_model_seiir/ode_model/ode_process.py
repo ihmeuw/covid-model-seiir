@@ -97,19 +97,11 @@ class SingleGroupODEProcess:
             start_date = date[df[col_cases] >= cases_threshold].min()
             idx_final = idx & (date >= start_date)
             if cases_threshold < 1e-6:
+                # this is a data poor location, so we just use the whole time
+                # series.
+                start_date = date.min()
+                idx_final = idx
                 break
-
-        if np.sum(idx_final) <= 2:
-            raise RuntimeError(
-                f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a '
-                f'spline. Number of data between date {start_date} and {end_date}'
-                f' is {np.sum(idx_final)}.'
-            )
-        if infection_end_date < start_date:
-            raise RuntimeError(
-                f'loc_id: {self.loc_id}, not enough non-zero cases before the '
-                'infection data end date to model and forecast.'
-            )
 
         self.df = df[idx_final].copy()
         date = date[idx_final]
