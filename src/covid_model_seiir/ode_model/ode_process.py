@@ -11,10 +11,10 @@ from datetime import datetime
 from odeopt.ode import RK4
 from odeopt.ode import LinearFirstOrder
 from odeopt.core.utils import linear_interpolate
-from .spline_fit import SplineFit
 
 
 class SingleGroupODEProcess:
+
     def __init__(self, df,
                  col_date,
                  col_cases,
@@ -28,10 +28,7 @@ class SingleGroupODEProcess:
                  gamma1=(0.5,)*2,
                  gamma2=(0.5,)*2,
                  solver_class=RK4,
-                 solver_dt=1e-1,
-                 spline_options=None,
-                 spline_se_power=1.0,
-                 spline_space='ln daily'):
+                 solver_dt=1e-1):
         """Constructor of the SingleGroupODEProcess
 
         Args:
@@ -48,10 +45,6 @@ class SingleGroupODEProcess:
             gamma2 (arraylike): bounds for uniformly sampling gamma2.
             solver_class (ODESolver, optional): Solver for the ODE system.
             solver_dt (float, optional): Step size for the ODE system.
-            spline_options (dict | None, optional):
-                Dictionary of spline prior options.
-            spline_se_power(float): The standard error scaling power.
-            spline_space (str): which space to fit the spline.
         """
         # observations
         assert col_date in df
@@ -91,6 +84,11 @@ class SingleGroupODEProcess:
         date = pd.to_datetime(df[col_date])
         end_date = self.today + np.timedelta64(self.day_shift -
                                                self.lag_days, 'D')
+        # Sometimes we don't have leading indicator data, so the day shift
+        # will put us into padded zeros.  Correct for this.
+        max_end_date = date[df[col_cases] > 0].max()
+        end_date = min(end_date, max_end_date)
+
         idx = date <= end_date
 
         cases_threshold = 50.0
@@ -104,19 +102,11 @@ class SingleGroupODEProcess:
             start_date = date[df[col_cases] >= cases_threshold].min()
             idx_final = idx & (date >= start_date)
             if cases_threshold < 1e-6:
+                # this is a data poor location, so we just use the whole time
+                # series.
+                start_date = date.min()
+                idx_final = idx
                 break
-
-        if np.sum(idx_final) <= 2:
-            raise RuntimeError(
-                f'loc_id: {self.loc_id}, not enough non-zero cases data to fit a '
-                f'spline. Number of data between date {start_date} and {end_date}'
-                f' is {np.sum(idx_final)}.'
-            )
-        if infection_end_date < start_date:
-            raise RuntimeError(
-                f'loc_id: {self.loc_id}, not enough non-zero cases before the '
-                'infection data end date to model and forecast.'
-            )
 
         self.df = df[idx_final].copy()
         date = date[idx_final]
@@ -152,29 +142,6 @@ class SingleGroupODEProcess:
         self.components = None
         self.create_ode_sys()
 
-        # spline solver setup
-        self.spline_options = {
-            'spline_knots': np.linspace(0.0, 1.0, 7),
-            'spline_degree': 3,
-            'prior_spline_convexity': 'concave',
-        }
-        self.spline_se_power = spline_se_power
-        self.spline_space = spline_space
-        if spline_options is not None:
-            self.spline_options.update(**spline_options)
-        self.create_spline()
-
-    def create_spline(self):
-        """Create spline fit object.
-        """
-        self.step_spline_model = SplineFit(
-            self.t,
-            self.obs,
-            self.spline_options,
-            se_power=self.spline_se_power,
-            space=self.spline_space
-        )
-
     def create_ode_sys(self):
         """Create 1D ODE solver.
         """
@@ -184,62 +151,10 @@ class SingleGroupODEProcess:
             solver_dt=self.solver_dt
         )
 
-    def update_ode_params(self,
-                          alpha=None,
-                          sigma=None,
-                          gamma1=None,
-                          gamma2=None):
-        """Update given parameters.
-
-        Args:
-            alpha (float | None, optional):
-                Updated alpha parameter, if `None` no update will happen.
-            sigma (float | None, optional):
-                Updated sigma parameter, if `None` no update will happen.
-            gamma1 (float | None, optional):
-                Updated gamma1 parameter, if `None` no update will happen.
-            gamma2 (float | None, optional):
-                Updated gamma2 parameter, if `None` no update will happen.
-        """
-        if alpha is not None:
-            assert 0.0 < alpha <= 1.0
-            self.alpha = alpha
-        if sigma is not None:
-            assert sigma >= 0.0
-            self.sigma = sigma
-        if gamma1 is not None:
-            assert gamma1 >= 0.0
-            self.gamma1 = gamma1
-        if gamma2 is not None:
-            assert gamma2 >= 0.0
-            self.gamma2 = gamma2
-
-    def update_data(self, obs):
-        """Update data.
-
-        Args:
-            obs (np.ndarray): independent variable.
-        """
-        assert self.obs.size == obs.size
-        self.obs = obs
-        self.create_spline()
-
-    def fit_spline(self):
-        """Fit spline.
-        """
-        self.step_spline_model.fit_spline()
-        rhs_newE = self.step_spline_model.predict(self.t_params)
-        rhs_newE[self.t_params > self.step_spline_model.spline.knots[-1]] = 0.0
-        self.rhs_newE = rhs_newE
-
-    def process(self, fit_spline=False):
+    def process(self):
         """Process the data.
         """
-        # fit the spline and predict the right-hand-side
-        if fit_spline:
-            self.fit_spline()
-        else:
-            self.rhs_newE = linear_interpolate(self.t_params, self.t, self.obs)
+        self.rhs_newE = linear_interpolate(self.t_params, self.t, self.obs)
         # fit the E
         self.step_ode_sys.update_given_params(c=self.sigma)
         E = self.step_ode_sys.simulate(self.t_params,
@@ -368,10 +283,7 @@ class ODEProcessInput:
     gamma1: Tuple
     gamma2: Tuple
     solver_dt: float
-    spline_options: Dict
     day_shift: Tuple
-    spline_se_power: float = 1.0
-    spline_space: str = 'ln daily'
 
 
 class ODEProcess:
@@ -392,9 +304,6 @@ class ODEProcess:
         self.col_observed = input.col_observed
 
         self.solver_dt = input.solver_dt
-        self.spline_options = input.spline_options
-        self.spline_se_power = input.spline_se_power
-        self.spline_space = input.spline_space
 
         # create the location id
         self.loc_ids = np.sort(list(self.df_dict.keys()))
@@ -435,10 +344,7 @@ class ODEProcess:
                     gamma2=(self.gamma2,)*2,
                     solver_class=RK4,
                     solver_dt=self.solver_dt,
-                    spline_options=self.spline_options,
                     today=self.today_dict[loc_id],
-                    spline_se_power=self.spline_se_power,
-                    spline_space=self.spline_space
                 )
             except AssertionError:
                 errors.append(loc_id)
