@@ -200,7 +200,7 @@ class SingleGroupODEProcess:
         R = self.step_ode_sys.simulate(self.t_params,
                                        np.array([self.init_cond['R']]),
                                        self.t_params,
-                                       self.gamma2*I2[None, :] + self.theta_minus*E[:, None])[0]
+                                       self.gamma2*I2[None, :] + self.theta_minus*E[None, :])[0]
 
         if np.any(neg_S_idx):
             id_min = np.min(np.arange(S.size)[neg_S_idx])
