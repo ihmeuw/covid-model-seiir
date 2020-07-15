@@ -179,7 +179,7 @@ class SingleGroupODEProcess:
         E = self.step_ode_sys.simulate(self.t_params,
                                        np.array([self.init_cond['E']]),
                                        self.t_params,
-                                       self.rhs_newE[None, :] + self.theta_plus*S[:, None])[0]
+                                       self.rhs_newE[None, :] + self.theta_plus*S[None, :])[0]
 
         # fit I1
         self.step_ode_sys.update_given_params(c=self.gamma1)
