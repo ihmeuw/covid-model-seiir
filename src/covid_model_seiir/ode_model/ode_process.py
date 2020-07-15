@@ -287,6 +287,7 @@ class ODEProcessInput:
     gamma2: Tuple
     solver_dt: float
     day_shift: Tuple
+    theta_locations_file: str = None
     theta: float = 0.0
 
 
@@ -317,7 +318,6 @@ class ODEProcess:
         self.sigma = np.random.uniform(*input.sigma)
         self.gamma1 = np.random.uniform(*input.gamma1)
         self.gamma2 = np.random.uniform(*input.gamma2)
-        self.theta = input.theta
         self.day_shift = int(np.random.uniform(*input.day_shift))
 
         # lag days
@@ -330,11 +330,27 @@ class ODEProcess:
             for loc_id in self.loc_ids
         }
 
+        # Thetas, optionally by location
+        self.theta = input.theta
+        if input.theta_locations_file:
+            self.theta_locations_df = pd.read_csv(input.theta_locations_file).set_index('location_id').theta
+        else:
+            self.theta_locations_df = None
+
         # create model for each location
         self.models = {}
         errors = []
         for loc_id in self.loc_ids:
             try:
+                # Take a location-specific theta if available, otherwise use the default
+                if self.theta_locations_df:
+                    try:
+                        theta_this_loc = theta_locations_df.at[loc_id]
+                    except KeyError:
+                        theta_this_loc = self.theta
+                else:
+                    theta_this_loc = self.theta
+
                 self.models[loc_id] = SingleGroupODEProcess(
                     self.df_dict[loc_id],
                     self.col_date,
@@ -347,7 +363,7 @@ class ODEProcess:
                     sigma=(self.sigma,)*2,
                     gamma1=(self.gamma1,)*2,
                     gamma2=(self.gamma2,)*2,
-                    theta=self.theta,
+                    theta=theta_this_loc,
                     solver_class=RK4,
                     solver_dt=self.solver_dt,
                     today=self.today_dict[loc_id],
