@@ -332,7 +332,7 @@ class ODEProcess:
 
         # Thetas, optionally by location
         self.theta = input.theta
-        if input.theta_locations_file:
+        if input.theta_locations_file is not None:
             self.theta_locations_df = pd.read_csv(input.theta_locations_file).set_index('location_id').theta
         else:
             self.theta_locations_df = None
