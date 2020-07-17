@@ -343,9 +343,9 @@ class ODEProcess:
         for loc_id in self.loc_ids:
             try:
                 # Take a location-specific theta if available, otherwise use the default
-                if self.theta_locations_df:
+                if self.theta_locations_df is not None:
                     try:
-                        theta_this_loc = theta_locations_df.at[loc_id]
+                        theta_this_loc = self.theta_locations_df.at[loc_id]
                     except KeyError:
                         theta_this_loc = self.theta
                 else:
