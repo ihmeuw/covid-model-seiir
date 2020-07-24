@@ -27,7 +27,6 @@ class SingleGroupODEProcess:
                  sigma=(0.2,)*2,
                  gamma1=(0.5,)*2,
                  gamma2=(0.5,)*2,
-                 theta=0.0,
                  solver_class=RK4,
                  solver_dt=1e-1):
         """Constructor of the SingleGroupODEProcess
@@ -44,7 +43,6 @@ class SingleGroupODEProcess:
             sigma (arraylike): bounds for uniformly sampling sigma.
             gamma1 (arraylike): bounds for uniformly sampling gamma1.
             gamma2 (arraylike): bounds for uniformly sampling gamma2.
-            theta (float): rate adjustment parameter.
             solver_class (ODESolver, optional): Solver for the ODE system.
             solver_dt (float, optional): Step size for the ODE system.
         """
@@ -73,9 +71,6 @@ class SingleGroupODEProcess:
         self.sigma = np.random.uniform(*sigma)
         self.gamma1 = np.random.uniform(*gamma1)
         self.gamma2 = np.random.uniform(*gamma2)
-        self.theta = theta
-        self.theta_plus = max(theta, 0.0)
-        self.theta_minus = -min(theta, 0.0)
         self.N = df[self.col_pop].values[0]
 
         assert len(day_shift) == 2 and \
@@ -159,30 +154,20 @@ class SingleGroupODEProcess:
     def process(self):
         """Process the data.
         """
-        # curve for new infectious
         self.rhs_newE = linear_interpolate(self.t_params, self.t, self.obs)
-
-        # get initial conditions
-        self.init_cond['I1'] = (self.rhs_newE[0]/5.0)**(1.0/self.alpha)
-        self.init_cond['S'] = self.N - self.init_cond['E'] - self.init_cond['I1']
-
-        # fit S
-        self.step_ode_sys.update_given_params(c=self.theta_plus)
-        S = self.step_ode_sys.simulate(self.t_params,
-                                       np.array([self.init_cond['S']]),
-                                       self.t_params,
-                                       -self.rhs_newE[None, :])[0]
-        neg_S_idx = S < 0.0
-
-        # fit E
-        self.step_ode_sys.update_given_params(c=self.sigma + self.theta_minus)
+        # fit the E
+        self.step_ode_sys.update_given_params(c=self.sigma)
         E = self.step_ode_sys.simulate(self.t_params,
                                        np.array([self.init_cond['E']]),
                                        self.t_params,
-                                       self.rhs_newE[None, :] + self.theta_plus*S[None, :])[0]
+                                       self.rhs_newE[None, :])[0]
 
         # fit I1
         self.step_ode_sys.update_given_params(c=self.gamma1)
+        # modify initial condition of I1
+        self.init_cond.update({
+            'I1': (self.rhs_newE[0]/5.0)**(1.0/self.alpha)
+        })
         I1 = self.step_ode_sys.simulate(self.t_params,
                                         np.array([self.init_cond['I1']]),
                                         self.t_params,
@@ -195,12 +180,23 @@ class SingleGroupODEProcess:
                                         self.t_params,
                                         self.gamma1*I1[None, :])[0]
 
+        # fit S
+        self.init_cond.update({
+            'S': self.N - self.init_cond['E'] - self.init_cond['I1']
+        })
+        self.step_ode_sys.update_given_params(c=0.0)
+        S = self.step_ode_sys.simulate(self.t_params,
+                                       np.array([self.init_cond['S']]),
+                                       self.t_params,
+                                       -self.rhs_newE[None, :])[0]
+        neg_S_idx = S < 0.0
+
         # fit R
         self.step_ode_sys.update_given_params(c=0.0)
         R = self.step_ode_sys.simulate(self.t_params,
                                        np.array([self.init_cond['R']]),
                                        self.t_params,
-                                       self.gamma2*I2[None, :] + self.theta_minus*E[None, :])[0]
+                                       self.gamma2*I2[None, :])[0]
 
         if np.any(neg_S_idx):
             id_min = np.min(np.arange(S.size)[neg_S_idx])
@@ -220,7 +216,8 @@ class SingleGroupODEProcess:
 
         # get beta
         self.params = (self.rhs_newE/
-                       ((S/self.N)*((I1 + I2)**self.alpha)))[None, :]
+                       ((S/self.N)*
+                        ((I1 + I2)**self.alpha)))[None, :]
 
     def predict(self, t):
         params = linear_interpolate(t, self.t_params, self.params)
@@ -287,8 +284,6 @@ class ODEProcessInput:
     gamma2: Tuple
     solver_dt: float
     day_shift: Tuple
-    theta_locations_file: str = None
-    theta: float = 0.0
 
 
 class ODEProcess:
@@ -330,27 +325,11 @@ class ODEProcess:
             for loc_id in self.loc_ids
         }
 
-        # Thetas, optionally by location
-        self.theta = input.theta
-        if input.theta_locations_file is not None:
-            self.theta_locations_df = pd.read_csv(input.theta_locations_file).set_index('location_id').theta
-        else:
-            self.theta_locations_df = None
-
         # create model for each location
         self.models = {}
         errors = []
         for loc_id in self.loc_ids:
             try:
-                # Take a location-specific theta if available, otherwise use the default
-                if self.theta_locations_df is not None:
-                    try:
-                        theta_this_loc = self.theta_locations_df.at[loc_id]
-                    except KeyError:
-                        theta_this_loc = self.theta
-                else:
-                    theta_this_loc = self.theta
-
                 self.models[loc_id] = SingleGroupODEProcess(
                     self.df_dict[loc_id],
                     self.col_date,
@@ -363,7 +342,6 @@ class ODEProcess:
                     sigma=(self.sigma,)*2,
                     gamma1=(self.gamma1,)*2,
                     gamma2=(self.gamma2,)*2,
-                    theta=theta_this_loc,
                     solver_class=RK4,
                     solver_dt=self.solver_dt,
                     today=self.today_dict[loc_id],
