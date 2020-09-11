@@ -15,6 +15,7 @@ from odeopt.core.utils import linear_interpolate
 
 class SingleGroupODEProcess:
 
+    # pass in P as a param here
     def __init__(self, df,
                  col_date,
                  col_cases,
@@ -124,11 +125,11 @@ class SingleGroupODEProcess:
         self.t = self.df[self.col_days].values
         self.obs = self.df[self.col_cases].values
         self.init_cond = {
-            'S': self.N,
+            'S': self.N,  # Change to (1-p) * self.N; this doesn't matter, gets redefined
             'E': self.obs[0],
             'I1': 1.0,
             'I2': 0.0,
-            'R': 0.0
+            'R': 0.0  # Change to p * self.N
         }
 
         # ode solver setup
@@ -182,6 +183,7 @@ class SingleGroupODEProcess:
 
         # fit S
         self.init_cond.update({
+            # Change to (1-p)*N - ...stuff...
             'S': self.N - self.init_cond['E'] - self.init_cond['I1']
         })
         self.step_ode_sys.update_given_params(c=0.0)
@@ -284,12 +286,13 @@ class ODEProcessInput:
     gamma2: Tuple
     solver_dt: float
     day_shift: Tuple
+    # add p as a param here
 
 
 class ODEProcess:
     """ODE Process for multiple group.
     """
-    def __init__(self, input):
+    def __init__(self, input: ODEProcessInput):
         """Constructor of ODEProcess.
 
         Args:
@@ -314,6 +317,7 @@ class ODEProcess:
         self.gamma1 = np.random.uniform(*input.gamma1)
         self.gamma2 = np.random.uniform(*input.gamma2)
         self.day_shift = int(np.random.uniform(*input.day_shift))
+        # Unpack p from the input here
 
         # lag days
         self.lag_days = self.df_dict[self.loc_ids[0]][
@@ -330,6 +334,7 @@ class ODEProcess:
         errors = []
         for loc_id in self.loc_ids:
             try:
+                # pass in p as a param here
                 self.models[loc_id] = SingleGroupODEProcess(
                     self.df_dict[loc_id],
                     self.col_date,
