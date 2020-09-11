@@ -184,7 +184,7 @@ class SingleGroupODEProcess:
 
         # fit S
         self.init_cond.update({
-            'S': (1 - functional_immune_proportion)*(self.N - self.init_cond['E'] - self.init_cond['I1'])
+            'S': (1 - self.functional_immune_proportion)*(self.N - self.init_cond['E'] - self.init_cond['I1'])
         })
         self.step_ode_sys.update_given_params(c=0.0)
         S = self.step_ode_sys.simulate(self.t_params,
