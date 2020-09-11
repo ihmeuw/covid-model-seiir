@@ -15,7 +15,6 @@ from odeopt.core.utils import linear_interpolate
 
 class SingleGroupODEProcess:
 
-    # pass in P as a param here
     def __init__(self, df,
                  col_date,
                  col_cases,
@@ -29,7 +28,8 @@ class SingleGroupODEProcess:
                  gamma1=(0.5,)*2,
                  gamma2=(0.5,)*2,
                  solver_class=RK4,
-                 solver_dt=1e-1):
+                 solver_dt=1e-1,
+                 functional_immune_proportion=0):
         """Constructor of the SingleGroupODEProcess
 
         Args:
@@ -46,6 +46,7 @@ class SingleGroupODEProcess:
             gamma2 (arraylike): bounds for uniformly sampling gamma2.
             solver_class (ODESolver, optional): Solver for the ODE system.
             solver_dt (float, optional): Step size for the ODE system.
+            functional_immune_proportion (float): Proportion of the population that has pre-exisiting "functional immunity".
         """
         # observations
         assert col_date in df
@@ -125,11 +126,11 @@ class SingleGroupODEProcess:
         self.t = self.df[self.col_days].values
         self.obs = self.df[self.col_cases].values
         self.init_cond = {
-            'S': self.N,  # Change to (1-p) * self.N; this doesn't matter, gets redefined
+            'S': (1 - functional_immune_proportion)*(self.N - self.obs[0] - 1.0),
             'E': self.obs[0],
             'I1': 1.0,
             'I2': 0.0,
-            'R': 0.0  # Change to p * self.N
+            'R': functional_immune_proportion*(self.N - self.obs[0] - 1.0)
         }
 
         # ode solver setup
@@ -183,8 +184,7 @@ class SingleGroupODEProcess:
 
         # fit S
         self.init_cond.update({
-            # Change to (1-p)*N - ...stuff...
-            'S': self.N - self.init_cond['E'] - self.init_cond['I1']
+            'S': (1 - functional_immune_proportion)*(self.N - self.init_cond['E'] - self.init_cond['I1'])
         })
         self.step_ode_sys.update_given_params(c=0.0)
         S = self.step_ode_sys.simulate(self.t_params,
@@ -286,7 +286,7 @@ class ODEProcessInput:
     gamma2: Tuple
     solver_dt: float
     day_shift: Tuple
-    # add p as a param here
+    functional_immune_proportion: float
 
 
 class ODEProcess:
@@ -307,6 +307,7 @@ class ODEProcess:
         self.col_observed = input.col_observed
 
         self.solver_dt = input.solver_dt
+        self.functional_immune_proportion = input.functional_immune_proportion
 
         # create the location id
         self.loc_ids = np.sort(list(self.df_dict.keys()))
@@ -317,7 +318,6 @@ class ODEProcess:
         self.gamma1 = np.random.uniform(*input.gamma1)
         self.gamma2 = np.random.uniform(*input.gamma2)
         self.day_shift = int(np.random.uniform(*input.day_shift))
-        # Unpack p from the input here
 
         # lag days
         self.lag_days = self.df_dict[self.loc_ids[0]][
@@ -334,7 +334,6 @@ class ODEProcess:
         errors = []
         for loc_id in self.loc_ids:
             try:
-                # pass in p as a param here
                 self.models[loc_id] = SingleGroupODEProcess(
                     self.df_dict[loc_id],
                     self.col_date,
@@ -349,6 +348,7 @@ class ODEProcess:
                     gamma2=(self.gamma2,)*2,
                     solver_class=RK4,
                     solver_dt=self.solver_dt,
+                    functional_immune_proportion=self.functional_immune_proportion,
                     today=self.today_dict[loc_id],
                 )
             except AssertionError:
