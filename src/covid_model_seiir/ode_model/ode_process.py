@@ -75,6 +75,8 @@ class SingleGroupODEProcess:
         self.gamma2 = np.random.uniform(*gamma2)
         self.N = df[self.col_pop].values[0]
 
+        self.functional_immune_proportion = functional_immune_proportion
+
         assert len(day_shift) == 2 and \
             day_shift[0] <= day_shift[1]
 
